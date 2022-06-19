@@ -431,8 +431,9 @@ mod test {
     use tracing::trace;
 
     #[tokio::test]
-    #[tracing_test::traced_test]
     async fn uni_stream_handler() -> Result<()> {
+        let _gaurd = crate::init_tracing_for_testing();
+
         let msg = b"hello";
         let config_1 = EndpointConfig::random("test");
         let (endpoint_1, _incoming_1) = Endpoint::new(config_1, "localhost:0")?;
@@ -491,8 +492,9 @@ mod test {
     }
 
     #[tokio::test]
-    #[tracing_test::traced_test]
     async fn basic_network() -> Result<()> {
+        let _gaurd = crate::init_tracing_for_testing();
+
         let msg = b"The Way of Kings";
         let config_1 = EndpointConfig::random("test");
         let (endpoint_1, incoming_1) = Endpoint::new(config_1, "localhost:0")?;

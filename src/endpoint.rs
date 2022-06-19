@@ -136,8 +136,9 @@ mod test {
     use std::time::Duration;
 
     #[tokio::test]
-    #[tracing_test::traced_test]
     async fn basic_endpoint() -> Result<()> {
+        let _gaurd = crate::init_tracing_for_testing();
+
         let msg = b"hello";
         let config_1 = EndpointConfig::random("test");
         let (endpoint_1, _incoming_1) = Endpoint::new(config_1, "localhost:0")?;
