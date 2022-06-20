@@ -39,7 +39,10 @@ impl Endpoint {
     }
 
     pub fn connect<A: std::net::ToSocketAddrs>(&self, addr: A) -> Result<Connecting> {
-        let addr = addr.to_socket_addrs()?.next().unwrap();
+        let addr = addr
+            .to_socket_addrs()?
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("no address to connect to"))?;
 
         self.inner
             .connect(addr, self.config.server_name())
