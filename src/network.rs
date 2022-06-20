@@ -60,15 +60,19 @@ impl Network {
         self.0.disconnect(peer)
     }
 
-    pub async fn rpc(&self, peer: PeerId, request: Bytes) -> Result<Bytes> {
+    pub async fn rpc(&self, peer: PeerId, request: Request<Bytes>) -> Result<Response<Bytes>> {
         self.0.rpc(peer, request).await
     }
 
-    pub async fn rpc_with_addr(&self, addr: SocketAddr, request: Bytes) -> Result<Bytes> {
+    pub async fn rpc_with_addr(
+        &self,
+        addr: SocketAddr,
+        request: Request<Bytes>,
+    ) -> Result<Response<Bytes>> {
         self.0.rpc_with_addr(addr, request).await
     }
 
-    pub async fn send_message(&self, peer: PeerId, request: Bytes) -> Result<()> {
+    pub async fn send_message(&self, peer: PeerId, request: Request<Bytes>) -> Result<()> {
         self.0.send_message(peer, request).await
     }
 
@@ -118,7 +122,7 @@ impl NetworkInner {
         Ok(())
     }
 
-    async fn rpc(&self, peer: PeerId, request: Bytes) -> Result<Bytes> {
+    async fn rpc(&self, peer: PeerId, request: Request<Bytes>) -> Result<Response<Bytes>> {
         let connection = self
             .connections
             .read()
@@ -128,7 +132,11 @@ impl NetworkInner {
         Self::do_rpc(connection, request).await
     }
 
-    async fn rpc_with_addr(&self, addr: SocketAddr, request: Bytes) -> Result<Bytes> {
+    async fn rpc_with_addr(
+        &self,
+        addr: SocketAddr,
+        request: Request<Bytes>,
+    ) -> Result<Response<Bytes>> {
         let maybe_connection = self
             .connections
             .read()
@@ -145,12 +153,14 @@ impl NetworkInner {
         Self::do_rpc(connection, request).await
     }
 
-    async fn do_rpc(connection: Connection, request: Bytes) -> Result<Bytes> {
+    async fn do_rpc(connection: Connection, request: Request<Bytes>) -> Result<Response<Bytes>> {
         let (send_stream, recv_stream) = connection.open_bi().await?;
         let mut send_stream = FramedWrite::new(send_stream, network_message_frame_codec());
         let mut recv_stream = FramedRead::new(recv_stream, network_message_frame_codec());
-        write_version_frame(send_stream.get_mut(), Version::V1).await?;
-        send_stream.send(request).await?;
+
+        write_version_frame(send_stream.get_mut(), request.version()).await?;
+
+        send_stream.send(request.into_body()).await?;
         send_stream.get_mut().finish().await?;
         let _version = read_version_frame(recv_stream.get_mut()).await?;
         let response = recv_stream.next().await.ok_or_else(|| {
@@ -159,16 +169,26 @@ impl NetworkInner {
                 connection.peer_identity()
             )
         })??;
-        Ok(response.into())
+
+        Ok(Response::new(response.into()))
     }
 
-    async fn send_message(&self, peer: PeerId, message: Bytes) -> Result<()> {
-        let connection = self.connections.read().get(&peer).unwrap().clone();
+    async fn send_message(&self, peer: PeerId, request: Request<Bytes>) -> Result<()> {
+        let connection = self
+            .connections
+            .read()
+            .get(&peer)
+            .ok_or_else(|| anyhow!("not connected to peer {peer}"))?
+            .clone();
+
         let send_stream = connection.open_uni().await?;
         let mut send_stream = FramedWrite::new(send_stream, network_message_frame_codec());
-        write_version_frame(send_stream.get_mut(), Version::V1).await?;
-        send_stream.send(message).await?;
+
+        write_version_frame(send_stream.get_mut(), request.version()).await?;
+
+        send_stream.send(request.into_body()).await?;
         send_stream.get_mut().finish().await.unwrap();
+
         Ok(())
     }
 
@@ -522,13 +542,17 @@ mod test {
         let network_2 = Network::start(endpoint_2, incoming_2, echo_service());
 
         let peer = network_1.connect(addr_2).await?;
-        let response = network_1.rpc(peer, msg.as_ref().into()).await?;
-        assert_eq!(response, msg.as_ref());
+        let response = network_1
+            .rpc(peer, Request::new(msg.as_ref().into()))
+            .await?;
+        assert_eq!(response.into_body(), msg.as_ref());
 
         let msg = b"Words of Radiance";
         let peer_id_1 = PeerId(pubkey_1);
-        let response = network_2.rpc(peer_id_1, msg.as_ref().into()).await?;
-        assert_eq!(response, msg.as_ref());
+        let response = network_2
+            .rpc(peer_id_1, Request::new(msg.as_ref().into()))
+            .await?;
+        assert_eq!(response.into_body(), msg.as_ref());
         Ok(())
     }
 
