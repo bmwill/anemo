@@ -21,7 +21,7 @@ rcgen = "0.9.2"
 rustls = { version = "0.20.4", features = ["dangerous_configuration"] }
 serde = { version = "1.0.136", features = ["derive"] }
 thiserror = "1.0.30"
-tokio = { version = "1.17.0", features = ["sync", "rt", "macros"] }
+tokio = { version = "1.17.0", features = ["sync", "rt", "macros", "io-util"] }
 tokio-util = { version = "0.7.1", features = ["codec"] }
 tower = { version = "0.4.12", features = ["full"] }
 tracing = "0.1.32"

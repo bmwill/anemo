@@ -1,4 +1,7 @@
-use crate::{Connection, ConnectionOrigin, Endpoint, Incoming, PeerId, Request, Response, Result};
+use crate::{
+    wire::{read_version_frame, write_version_frame, Version},
+    Connection, ConnectionOrigin, Endpoint, Incoming, PeerId, Request, Response, Result,
+};
 use anyhow::anyhow;
 use bytes::Bytes;
 use futures::{
@@ -27,7 +30,7 @@ impl Network {
     pub fn start(
         endpoint: Endpoint,
         incoming: Incoming,
-        rpc_service: BoxCloneService<Request, Response, Infallible>,
+        rpc_service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
     ) -> Self {
         let network = Self(Arc::new(NetworkInner {
             endpoint,
@@ -83,8 +86,8 @@ struct NetworkInner {
     endpoint: Endpoint,
     connections: RwLock<HashMap<PeerId, Connection>>,
     //TODO these shouldn't need to be wrapped in mutexes
-    on_uni: Mutex<BoxCloneService<Request, (), Infallible>>,
-    on_bi: Mutex<BoxCloneService<Request, Response, Infallible>>,
+    on_uni: Mutex<BoxCloneService<Request<Bytes>, (), Infallible>>,
+    on_bi: Mutex<BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>>,
 }
 
 impl NetworkInner {
@@ -146,8 +149,10 @@ impl NetworkInner {
         let (send_stream, recv_stream) = connection.open_bi().await?;
         let mut send_stream = FramedWrite::new(send_stream, network_message_frame_codec());
         let mut recv_stream = FramedRead::new(recv_stream, network_message_frame_codec());
+        write_version_frame(send_stream.get_mut(), Version::V1).await?;
         send_stream.send(request).await?;
         send_stream.get_mut().finish().await?;
+        let _version = read_version_frame(recv_stream.get_mut()).await?;
         let response = recv_stream.next().await.ok_or_else(|| {
             anyhow!(
                 "unable to get response from peer {:?}",
@@ -161,6 +166,7 @@ impl NetworkInner {
         let connection = self.connections.read().get(&peer).unwrap().clone();
         let send_stream = connection.open_uni().await?;
         let mut send_stream = FramedWrite::new(send_stream, network_message_frame_codec());
+        write_version_frame(send_stream.get_mut(), Version::V1).await?;
         send_stream.send(message).await?;
         send_stream.get_mut().finish().await.unwrap();
         Ok(())
@@ -286,14 +292,14 @@ impl InboundConnectionHandler {
 struct InboundRequestHandler {
     incoming_uni: Fuse<IncomingUniStreams>,
     incoming_bi: Fuse<IncomingBiStreams>,
-    bi_service: BoxCloneService<Request, Response, Infallible>,
-    uni_service: BoxCloneService<Request, (), Infallible>,
+    bi_service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
+    uni_service: BoxCloneService<Request<Bytes>, (), Infallible>,
 }
 
 impl InboundRequestHandler {
     fn new(
-        service: BoxCloneService<Request, Response, Infallible>,
-        uni_service: BoxCloneService<Request, (), Infallible>,
+        service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
+        uni_service: BoxCloneService<Request<Bytes>, (), Infallible>,
         incoming_uni: IncomingUniStreams,
         incoming_bi: IncomingBiStreams,
     ) -> Self {
@@ -348,14 +354,14 @@ pub(crate) fn network_message_frame_codec() -> LengthDelimitedCodec {
 }
 
 struct BiStreamRequestHandler {
-    service: BoxCloneService<Request, Response, Infallible>,
+    service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
     send_stream: FramedWrite<SendStream, LengthDelimitedCodec>,
     recv_stream: FramedRead<RecvStream, LengthDelimitedCodec>,
 }
 
 impl BiStreamRequestHandler {
     fn new(
-        service: BoxCloneService<Request, Response, Infallible>,
+        service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
         send_stream: SendStream,
         recv_stream: RecvStream,
     ) -> Self {
@@ -374,28 +380,31 @@ impl BiStreamRequestHandler {
 
     async fn do_handle(mut self) -> Result<()> {
         //TODO define wire format
+        let _version = read_version_frame(self.recv_stream.get_mut()).await?;
         let request = self
             .recv_stream
             .next()
             .await
             .ok_or_else(|| anyhow!("unable to recieve message"))??;
-        let request = Request {
-            body: request.into(),
-        };
+        let request = Request::new(request.into());
         let response = self.service.oneshot(request).await.expect("Infallible");
-        self.send_stream.send(response.body).await?;
+        write_version_frame(self.send_stream.get_mut(), Version::V1).await?;
+        self.send_stream.send(response.into_body()).await?;
         self.send_stream.get_mut().finish().await?;
         Ok(())
     }
 }
 
 struct UniStreamRequestHandler {
-    service: BoxCloneService<Request, (), Infallible>,
+    service: BoxCloneService<Request<Bytes>, (), Infallible>,
     recv_stream: FramedRead<RecvStream, LengthDelimitedCodec>,
 }
 
 impl UniStreamRequestHandler {
-    fn new(service: BoxCloneService<Request, (), Infallible>, recv_stream: RecvStream) -> Self {
+    fn new(
+        service: BoxCloneService<Request<Bytes>, (), Infallible>,
+        recv_stream: RecvStream,
+    ) -> Self {
         Self {
             service,
             recv_stream: FramedRead::new(recv_stream, network_message_frame_codec()),
@@ -410,14 +419,13 @@ impl UniStreamRequestHandler {
 
     async fn do_handle(mut self) -> Result<()> {
         //TODO define wire format
+        let _version = read_version_frame(self.recv_stream.get_mut()).await?;
         let request = self
             .recv_stream
             .next()
             .await
             .ok_or_else(|| anyhow!("unable to recieve message"))??;
-        let request = Request {
-            body: request.into(),
-        };
+        let request = Request::new(request.into());
         let _ = self.service.oneshot(request).await.expect("Infallible");
         Ok(())
     }
@@ -481,10 +489,12 @@ mod test {
         Ok(())
     }
 
-    fn expect_uni_service(expected: &'static [u8]) -> BoxCloneService<Request, (), Infallible> {
-        let handle = move |request: Request| async move {
-            trace!("recieved: {}", request.body.escape_ascii());
-            assert_eq!(request.body.as_ref(), expected);
+    fn expect_uni_service(
+        expected: &'static [u8],
+    ) -> BoxCloneService<Request<Bytes>, (), Infallible> {
+        let handle = move |request: Request<Bytes>| async move {
+            trace!("recieved: {}", request.body().escape_ascii());
+            assert_eq!(request.body().as_ref(), expected);
             Result::<(), Infallible>::Ok(())
         };
 
@@ -522,20 +532,20 @@ mod test {
         Ok(())
     }
 
-    fn echo_service() -> BoxCloneService<Request, Response, Infallible> {
-        let handle = move |request: Request| async move {
-            trace!("recieved: {}", request.body.escape_ascii());
-            let response = Response { body: request.body };
-            Result::<Response, Infallible>::Ok(response)
+    fn echo_service() -> BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible> {
+        let handle = move |request: Request<Bytes>| async move {
+            trace!("recieved: {}", request.body().escape_ascii());
+            let response = Response::new(request.into_body());
+            Result::<Response<Bytes>, Infallible>::Ok(response)
         };
 
         tower::service_fn(handle).boxed_clone()
     }
 }
 
-fn noop_service() -> BoxCloneService<Request, (), Infallible> {
-    let handle = move |request: Request| async move {
-        trace!("recieved: {}", request.body.escape_ascii());
+fn noop_service() -> BoxCloneService<Request<Bytes>, (), Infallible> {
+    let handle = move |request: Request<Bytes>| async move {
+        trace!("recieved: {}", request.body().escape_ascii());
         Result::<(), Infallible>::Ok(())
     };
 
