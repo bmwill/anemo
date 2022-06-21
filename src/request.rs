@@ -1,6 +1,5 @@
 use crate::{wire::Version, HeaderMap};
 
-#[derive(Default)]
 pub struct RequestHeader {
     pub route: String,
 
@@ -9,6 +8,16 @@ pub struct RequestHeader {
 
     /// The request's headers
     pub headers: HeaderMap,
+}
+
+impl Default for RequestHeader {
+    fn default() -> Self {
+        Self {
+            route: "/".into(),
+            version: Default::default(),
+            headers: Default::default(),
+        }
+    }
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
