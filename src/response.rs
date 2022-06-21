@@ -1,3 +1,4 @@
+use crate::Result;
 use crate::{wire::Version, HeaderMap};
 
 #[derive(Default)]
@@ -10,6 +11,22 @@ pub struct ResponseHeader {
     pub headers: HeaderMap,
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
+pub(crate) struct RawResponseHeader {
+    pub status: u16,
+
+    pub headers: HeaderMap,
+}
+
+impl RawResponseHeader {
+    pub fn from_header(header: ResponseHeader) -> Self {
+        Self {
+            status: header.status.to_u16(),
+            headers: header.headers,
+        }
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u16)]
 pub enum StatusCode {
@@ -17,6 +34,24 @@ pub enum StatusCode {
     BadRequest = 400,
     InternalServerError = 500,
     VersionNotSupported = 505,
+}
+
+impl StatusCode {
+    pub fn new(code: u16) -> Result<Self> {
+        let status = match code {
+            200 => Self::Success,
+            400 => Self::BadRequest,
+            500 => Self::InternalServerError,
+            505 => Self::VersionNotSupported,
+            _ => return Err(anyhow::anyhow!("invalid StatusCode {}", code)),
+        };
+
+        Ok(status)
+    }
+
+    pub fn to_u16(self) -> u16 {
+        self as u16
+    }
 }
 
 impl Default for StatusCode {

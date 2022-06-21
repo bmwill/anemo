@@ -35,8 +35,7 @@ impl Default for Version {
     }
 }
 
-#[derive(Default)]
-pub struct HeaderMap(HashMap<String, String>);
+pub type HeaderMap = HashMap<String, String>;
 
 pub(crate) async fn read_version_frame<T: AsyncRead + Unpin>(
     recv_stream: &mut T,

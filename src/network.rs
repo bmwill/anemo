@@ -1,9 +1,11 @@
 use crate::{
-    wire::{read_version_frame, write_version_frame, Version},
+    request::{RawRequestHeader, RequestHeader},
+    response::{RawResponseHeader, ResponseHeader, StatusCode},
+    wire::{read_version_frame, write_version_frame},
     Connection, ConnectionOrigin, Endpoint, Incoming, PeerId, Request, Response, Result,
 };
 use anyhow::anyhow;
-use bytes::Bytes;
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 use futures::{
     stream::{Fuse, FuturesUnordered},
     SinkExt, StreamExt,
@@ -158,19 +160,54 @@ impl NetworkInner {
         let mut send_stream = FramedWrite::new(send_stream, network_message_frame_codec());
         let mut recv_stream = FramedRead::new(recv_stream, network_message_frame_codec());
 
+        //
+        // Write Request
+        //
+
+        // Write Version Frame
         write_version_frame(send_stream.get_mut(), request.version()).await?;
 
-        send_stream.send(request.into_body()).await?;
-        send_stream.get_mut().finish().await?;
-        let _version = read_version_frame(recv_stream.get_mut()).await?;
-        let response = recv_stream.next().await.ok_or_else(|| {
-            anyhow!(
-                "unable to get response from peer {:?}",
-                connection.peer_identity()
-            )
-        })??;
+        let (parts, body) = request.into_parts();
 
-        Ok(Response::new(response.into()))
+        // Write Request Header
+        let raw_header = RawRequestHeader::from_header(parts);
+        let mut buf = BytesMut::new();
+        bincode::serialize_into((&mut buf).writer(), &raw_header)
+            .expect("serialization should not fail");
+        send_stream.send(buf.freeze()).await?;
+
+        // Write Body
+        send_stream.send(body).await?;
+        send_stream.get_mut().finish().await?;
+
+        //
+        // Read Response
+        //
+
+        // Read Version Frame
+        let version = read_version_frame(recv_stream.get_mut()).await?;
+
+        // Read Request Header
+        let header_buf = recv_stream
+            .next()
+            .await
+            .ok_or_else(|| anyhow!("unexpected EOF"))??;
+        let raw_header: RawResponseHeader = bincode::deserialize_from(header_buf.reader())?;
+        let response_header = ResponseHeader {
+            status: StatusCode::new(raw_header.status)?,
+            version,
+            headers: raw_header.headers,
+        };
+
+        // Read Body
+        let body = recv_stream
+            .next()
+            .await
+            .ok_or_else(|| anyhow!("unexpected EOF"))??;
+
+        let response = Response::from_parts(response_header, body.freeze());
+
+        Ok(response)
     }
 
     async fn send_message(&self, peer: PeerId, request: Request<Bytes>) -> Result<()> {
@@ -184,10 +221,25 @@ impl NetworkInner {
         let send_stream = connection.open_uni().await?;
         let mut send_stream = FramedWrite::new(send_stream, network_message_frame_codec());
 
+        //
+        // Write Request
+        //
+
+        // Write Version Frame
         write_version_frame(send_stream.get_mut(), request.version()).await?;
 
-        send_stream.send(request.into_body()).await?;
-        send_stream.get_mut().finish().await.unwrap();
+        let (parts, body) = request.into_parts();
+
+        // Write Request Header
+        let raw_header = RawRequestHeader::from_header(parts);
+        let mut buf = BytesMut::new();
+        bincode::serialize_into((&mut buf).writer(), &raw_header)
+            .expect("serialization should not fail");
+        send_stream.send(buf.freeze()).await?;
+
+        // Write Body
+        send_stream.send(body).await?;
+        send_stream.get_mut().finish().await?;
 
         Ok(())
     }
@@ -399,17 +451,56 @@ impl BiStreamRequestHandler {
     }
 
     async fn do_handle(mut self) -> Result<()> {
-        //TODO define wire format
-        let _version = read_version_frame(self.recv_stream.get_mut()).await?;
-        let request = self
+        //
+        // Read Request
+        //
+
+        // Read Version Frame
+        let version = read_version_frame(self.recv_stream.get_mut()).await?;
+
+        // Read Request Header
+        let header_buf = self
             .recv_stream
             .next()
             .await
-            .ok_or_else(|| anyhow!("unable to recieve message"))??;
-        let request = Request::new(request.into());
+            .ok_or_else(|| anyhow!("unexpected EOF"))??;
+        let raw_header: RawRequestHeader = bincode::deserialize_from(header_buf.reader())?;
+        let request_header = RequestHeader {
+            route: raw_header.route,
+            version,
+            headers: raw_header.headers,
+        };
+
+        // Read Body
+        let body = self
+            .recv_stream
+            .next()
+            .await
+            .ok_or_else(|| anyhow!("unexpected EOF"))??;
+
+        let request = Request::from_parts(request_header, body.freeze());
+
+        // Issue request to configured Service
         let response = self.service.oneshot(request).await.expect("Infallible");
-        write_version_frame(self.send_stream.get_mut(), Version::V1).await?;
-        self.send_stream.send(response.into_body()).await?;
+
+        //
+        // Write Response
+        //
+
+        // Write Version Frame
+        write_version_frame(self.send_stream.get_mut(), response.version()).await?;
+
+        let (parts, body) = response.into_parts();
+
+        // Write Request Header
+        let raw_header = RawResponseHeader::from_header(parts);
+        let mut buf = BytesMut::new();
+        bincode::serialize_into((&mut buf).writer(), &raw_header)
+            .expect("serialization should not fail");
+        self.send_stream.send(buf.freeze()).await?;
+
+        // Write Body
+        self.send_stream.send(body).await?;
         self.send_stream.get_mut().finish().await?;
         Ok(())
     }
@@ -438,15 +529,38 @@ impl UniStreamRequestHandler {
     }
 
     async fn do_handle(mut self) -> Result<()> {
-        //TODO define wire format
-        let _version = read_version_frame(self.recv_stream.get_mut()).await?;
-        let request = self
+        //
+        // Read Request
+        //
+
+        // Read Version Frame
+        let version = read_version_frame(self.recv_stream.get_mut()).await?;
+
+        // Read Request Header
+        let header_buf = self
             .recv_stream
             .next()
             .await
-            .ok_or_else(|| anyhow!("unable to recieve message"))??;
-        let request = Request::new(request.into());
+            .ok_or_else(|| anyhow!("unexpected EOF"))??;
+        let raw_header: RawRequestHeader = bincode::deserialize_from(header_buf.reader())?;
+        let request_header = RequestHeader {
+            route: raw_header.route,
+            version,
+            headers: raw_header.headers,
+        };
+
+        // Read Body
+        let body = self
+            .recv_stream
+            .next()
+            .await
+            .ok_or_else(|| anyhow!("unexpected EOF"))??;
+
+        let request = Request::from_parts(request_header, body.freeze());
+
+        // Issue request to configured Service
         let _ = self.service.oneshot(request).await.expect("Infallible");
+
         Ok(())
     }
 }
@@ -479,11 +593,28 @@ mod test {
             let (connection, _, _) = endpoint_1.connect(addr_2).unwrap().await.unwrap();
             assert_eq!(connection.peer_identity(), pubkey_2);
             {
+                let request = Request::new(msg.as_ref().into());
+
                 let mut send_stream = FramedWrite::new(
                     connection.open_uni().await.unwrap(),
                     network_message_frame_codec(),
                 );
-                send_stream.send(msg.as_ref().into()).await.unwrap();
+                // Write Version Frame
+                write_version_frame(send_stream.get_mut(), request.version())
+                    .await
+                    .unwrap();
+
+                let (parts, body) = request.into_parts();
+
+                // Write Request Header
+                let raw_header = RawRequestHeader::from_header(parts);
+                let mut buf = BytesMut::new();
+                bincode::serialize_into((&mut buf).writer(), &raw_header)
+                    .expect("serialization should not fail");
+                send_stream.send(buf.freeze()).await.unwrap();
+
+                // Write Body
+                send_stream.send(body).await.unwrap();
                 send_stream.get_mut().finish().await.unwrap();
             }
             endpoint_1.close();
@@ -499,7 +630,7 @@ mod test {
 
             let recv = uni_streams.next().await.unwrap().unwrap();
             let request_handler = UniStreamRequestHandler::new(service, recv);
-            request_handler.handle().await;
+            request_handler.do_handle().await.unwrap();
             endpoint_2.close();
             // Result::<()>::Ok(())
         };

@@ -11,6 +11,22 @@ pub struct RequestHeader {
     pub headers: HeaderMap,
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
+pub(crate) struct RawRequestHeader {
+    pub route: String,
+
+    pub headers: HeaderMap,
+}
+
+impl RawRequestHeader {
+    pub fn from_header(header: RequestHeader) -> Self {
+        Self {
+            route: header.route,
+            headers: header.headers,
+        }
+    }
+}
+
 pub struct Request<T> {
     head: RequestHeader,
     body: T,
