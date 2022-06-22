@@ -1,5 +1,4 @@
-use crate::Result;
-use crate::{wire::Version, HeaderMap};
+use crate::{wire::Version, HeaderMap, Result};
 
 #[derive(Default)]
 pub struct ResponseHeader {

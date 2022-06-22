@@ -1,12 +1,16 @@
 // Wire format
 
-use crate::Result;
-use anyhow::bail;
+use crate::{
+    request::{RawRequestHeader, RequestHeader},
+    response::{RawResponseHeader, ResponseHeader, StatusCode},
+    Request, Response, Result,
+};
+use anyhow::{anyhow, bail};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
+use futures::{SinkExt, StreamExt};
 use std::collections::HashMap;
-use tokio::io::AsyncRead;
-use tokio::io::AsyncReadExt;
-use tokio::io::AsyncWrite;
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
 
 const ANEMO: &[u8; 5] = b"anemo";
 
@@ -61,6 +65,108 @@ pub(crate) async fn write_version_frame<T: AsyncWrite + Unpin>(
     send_stream.write_all(&buf).await?;
 
     Ok(())
+}
+
+pub(crate) async fn write_request<T: AsyncWrite + Unpin>(
+    send_stream: &mut FramedWrite<T, LengthDelimitedCodec>,
+    request: Request<Bytes>,
+) -> Result<()> {
+    // Write Version Frame
+    write_version_frame(send_stream.get_mut(), request.version()).await?;
+
+    let (parts, body) = request.into_parts();
+
+    // Write Request Header
+    let raw_header = RawRequestHeader::from_header(parts);
+    let mut buf = BytesMut::new();
+    bincode::serialize_into((&mut buf).writer(), &raw_header)
+        .expect("serialization should not fail");
+    send_stream.send(buf.freeze()).await?;
+
+    // Write Body
+    send_stream.send(body).await?;
+
+    Ok(())
+}
+
+pub(crate) async fn write_response<T: AsyncWrite + Unpin>(
+    send_stream: &mut FramedWrite<T, LengthDelimitedCodec>,
+    response: Response<Bytes>,
+) -> Result<()> {
+    // Write Version Frame
+    write_version_frame(send_stream.get_mut(), response.version()).await?;
+
+    let (parts, body) = response.into_parts();
+
+    // Write Request Header
+    let raw_header = RawResponseHeader::from_header(parts);
+    let mut buf = BytesMut::new();
+    bincode::serialize_into((&mut buf).writer(), &raw_header)
+        .expect("serialization should not fail");
+    send_stream.send(buf.freeze()).await?;
+
+    // Write Body
+    send_stream.send(body).await?;
+
+    Ok(())
+}
+
+pub(crate) async fn read_request<T: AsyncRead + Unpin>(
+    recv_stream: &mut FramedRead<T, LengthDelimitedCodec>,
+) -> Result<Request<Bytes>> {
+    // Read Version Frame
+    let version = read_version_frame(recv_stream.get_mut()).await?;
+
+    // Read Request Header
+    let header_buf = recv_stream
+        .next()
+        .await
+        .ok_or_else(|| anyhow!("unexpected EOF"))??;
+    let raw_header: RawRequestHeader = bincode::deserialize_from(header_buf.reader())?;
+    let request_header = RequestHeader {
+        route: raw_header.route,
+        version,
+        headers: raw_header.headers,
+    };
+
+    // Read Body
+    let body = recv_stream
+        .next()
+        .await
+        .ok_or_else(|| anyhow!("unexpected EOF"))??;
+
+    let request = Request::from_parts(request_header, body.freeze());
+
+    Ok(request)
+}
+
+pub(crate) async fn read_response<T: AsyncRead + Unpin>(
+    recv_stream: &mut FramedRead<T, LengthDelimitedCodec>,
+) -> Result<Response<Bytes>> {
+    // Read Version Frame
+    let version = read_version_frame(recv_stream.get_mut()).await?;
+
+    // Read Request Header
+    let header_buf = recv_stream
+        .next()
+        .await
+        .ok_or_else(|| anyhow!("unexpected EOF"))??;
+    let raw_header: RawResponseHeader = bincode::deserialize_from(header_buf.reader())?;
+    let response_header = ResponseHeader {
+        status: StatusCode::new(raw_header.status)?,
+        version,
+        headers: raw_header.headers,
+    };
+
+    // Read Body
+    let body = recv_stream
+        .next()
+        .await
+        .ok_or_else(|| anyhow!("unexpected EOF"))??;
+
+    let response = Response::from_parts(response_header, body.freeze());
+
+    Ok(response)
 }
 
 #[cfg(test)]
