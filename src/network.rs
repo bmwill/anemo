@@ -105,7 +105,7 @@ impl NetworkInner {
     }
 
     fn peer_id(&self) -> PeerId {
-        PeerId(self.endpoint.config().keypair().public)
+        self.endpoint.peer_id()
     }
 
     async fn connect(&self, addr: SocketAddr) -> Result<PeerId> {
@@ -535,34 +535,36 @@ mod test {
         let _gaurd = crate::init_tracing_for_testing();
 
         let msg = b"The Way of Kings";
-        let config_1 = EndpointConfig::random("test");
-        let (endpoint_1, incoming_1) = Endpoint::new(config_1, "localhost:0")?;
-        let pubkey_1 = endpoint_1.config().keypair().public;
 
-        trace!("1: {}", endpoint_1.local_addr());
+        let network_1 = build_network()?;
+        let network_2 = build_network()?;
 
-        let config_2 = EndpointConfig::random("test");
-        let (endpoint_2, incoming_2) = Endpoint::new(config_2, "localhost:0")?;
-        let _pubkey_2 = endpoint_2.config().keypair().public;
-        let addr_2 = endpoint_2.local_addr();
-        trace!("2: {}", endpoint_2.local_addr());
-
-        let network_1 = Network::start(endpoint_1, incoming_1, echo_service());
-        let network_2 = Network::start(endpoint_2, incoming_2, echo_service());
-
-        let peer = network_1.connect(addr_2).await?;
+        let peer = network_1.connect(network_2.local_addr()).await?;
         let response = network_1
             .rpc(peer, Request::new(msg.as_ref().into()))
             .await?;
         assert_eq!(response.into_body(), msg.as_ref());
 
         let msg = b"Words of Radiance";
-        let peer_id_1 = PeerId(pubkey_1);
+        let peer_id_1 = network_1.peer_id();
         let response = network_2
             .rpc(peer_id_1, Request::new(msg.as_ref().into()))
             .await?;
         assert_eq!(response.into_body(), msg.as_ref());
         Ok(())
+    }
+
+    fn build_network() -> Result<Network> {
+        let config = EndpointConfig::random("test");
+        let (endpoint, incoming) = Endpoint::new(config, "localhost:0")?;
+        trace!(
+            address =% endpoint.local_addr(),
+            peer_id =% endpoint.peer_id(),
+            "starting network"
+        );
+
+        let network = Network::start(endpoint, incoming, echo_service());
+        Ok(network)
     }
 
     fn echo_service() -> BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible> {

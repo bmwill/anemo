@@ -1,4 +1,4 @@
-use crate::{config::EndpointConfig, Connection, ConnectionOrigin, Result};
+use crate::{config::EndpointConfig, Connection, ConnectionOrigin, PeerId, Result};
 use futures::{FutureExt, StreamExt};
 use quinn::{IncomingBiStreams, IncomingUniStreams};
 use std::{
@@ -53,6 +53,10 @@ impl Endpoint {
     /// Returns the socket address that this Endpoint is bound to.
     pub fn local_addr(&self) -> SocketAddr {
         self.local_addr
+    }
+
+    pub fn peer_id(&self) -> PeerId {
+        PeerId(self.config().keypair().public)
     }
 
     pub fn config(&self) -> &EndpointConfig {
