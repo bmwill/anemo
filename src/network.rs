@@ -1,4 +1,5 @@
 use crate::{
+    peer::Peer,
     wire::{read_request, read_response, write_request, write_response},
     Connection, ConnectionOrigin, Endpoint, Incoming, PeerId, Request, Response, Result,
 };
@@ -50,6 +51,10 @@ impl Network {
 
     pub fn peers(&self) -> Vec<PeerId> {
         self.0.peers()
+    }
+
+    pub fn peer(&self, peer_id: PeerId) -> Option<Peer> {
+        self.0.peer(peer_id)
     }
 
     pub async fn connect(&self, addr: SocketAddr) -> Result<PeerId> {
@@ -120,6 +125,11 @@ impl NetworkInner {
             connection.close();
         }
         Ok(())
+    }
+
+    pub fn peer(&self, peer_id: PeerId) -> Option<Peer> {
+        let connection = self.connections.read().get(&peer_id)?.clone();
+        Some(Peer::new(connection))
     }
 
     async fn rpc(&self, peer: PeerId, request: Request<Bytes>) -> Result<Response<Bytes>> {

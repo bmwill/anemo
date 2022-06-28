@@ -5,6 +5,7 @@ mod crypto;
 mod endpoint;
 mod error;
 mod network;
+mod peer;
 mod request;
 mod response;
 mod wire;
