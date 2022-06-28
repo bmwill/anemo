@@ -120,3 +120,22 @@ impl<T> Response<T> {
         }
     }
 }
+
+pub trait IntoResponse {
+    /// Create a response.
+    fn into_response(self) -> Response<bytes::Bytes>;
+}
+
+impl IntoResponse for StatusCode {
+    fn into_response(self) -> Response<bytes::Bytes> {
+        let mut response = ().into_response();
+        *response.status_mut() = self;
+        response
+    }
+}
+
+impl IntoResponse for () {
+    fn into_response(self) -> Response<bytes::Bytes> {
+        Response::new(bytes::Bytes::new())
+    }
+}
