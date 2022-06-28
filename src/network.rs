@@ -36,7 +36,6 @@ impl Network {
         let network = Self(Arc::new(NetworkInner {
             endpoint,
             connections: Default::default(),
-            on_uni: Mutex::new(noop_service()),
             on_bi: Mutex::new(rpc_service),
         }));
 
@@ -95,7 +94,6 @@ struct NetworkInner {
     endpoint: Endpoint,
     connections: RwLock<HashMap<PeerId, Connection>>,
     //TODO these shouldn't need to be wrapped in mutexes
-    on_uni: Mutex<BoxCloneService<Request<Bytes>, (), Infallible>>,
     on_bi: Mutex<BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>>,
 }
 
@@ -236,12 +234,8 @@ impl NetworkInner {
                 entry.insert(connection);
             }
         }
-        let request_handler = InboundRequestHandler::new(
-            self.on_bi.lock().clone(),
-            self.on_uni.lock().clone(),
-            incoming_uni,
-            incoming_bi,
-        );
+        let request_handler =
+            InboundRequestHandler::new(self.on_bi.lock().clone(), incoming_uni, incoming_bi);
 
         tokio::spawn(request_handler.start());
     }
@@ -323,49 +317,51 @@ impl InboundConnectionHandler {
 }
 
 struct InboundRequestHandler {
-    incoming_uni: Fuse<IncomingUniStreams>,
+    service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
     incoming_bi: Fuse<IncomingBiStreams>,
-    bi_service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
-    uni_service: BoxCloneService<Request<Bytes>, (), Infallible>,
+    incoming_uni: Fuse<IncomingUniStreams>,
 }
 
 impl InboundRequestHandler {
     fn new(
         service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
-        uni_service: BoxCloneService<Request<Bytes>, (), Infallible>,
         incoming_uni: IncomingUniStreams,
         incoming_bi: IncomingBiStreams,
     ) -> Self {
         Self {
+            service,
             incoming_uni: incoming_uni.fuse(),
             incoming_bi: incoming_bi.fuse(),
-            bi_service: service,
-            uni_service,
         }
     }
 
     async fn start(mut self) {
         info!("InboundRequestHandler started");
 
+        let mut inflight_requests = FuturesUnordered::new();
+
         loop {
             futures::select! {
+                // anemo does not currently use uni streams so we can
+                // just ignore and drop the stream
                 uni = self.incoming_uni.select_next_some() => {
-                    if let Ok(recv_stream) = uni {
-                        info!("incoming uni stream! {}", recv_stream.id());
-                        let request_handler =
-                        UniStreamRequestHandler::new(self.uni_service.clone(), recv_stream);
-                        tokio::spawn(request_handler.handle());
+                    match uni {
+                        Ok(recv_stream) => trace!("incoming uni stream! {}", recv_stream.id()),
+                        Err(e) => trace!("error listening for incoming uni streams: {e}"),
                     }
                 },
                 bi = self.incoming_bi.select_next_some() => {
-                    if let Ok((bi_tx, bi_rx)) = bi {
-                        info!("incoming bi stream! {}", bi_tx.id());
-                        // Maybe handle via FuturesUnordered
-                        let request_handler =
-                        BiStreamRequestHandler::new(self.bi_service.clone(), bi_tx, bi_rx);
-                        tokio::spawn(request_handler.handle());
+                    match bi {
+                        Ok((bi_tx, bi_rx)) => {
+                            info!("incoming bi stream! {}", bi_tx.id());
+                            let request_handler =
+                                BiStreamRequestHandler::new(self.service.clone(), bi_tx, bi_rx);
+                            inflight_requests.push(request_handler.handle());
+                        }
+                        Err(e) => trace!("error listening for incoming bi streams: {e}"),
                     }
                 },
+                () = inflight_requests.select_next_some() => {},
                 complete => break,
             }
         }
@@ -432,113 +428,11 @@ impl BiStreamRequestHandler {
     }
 }
 
-struct UniStreamRequestHandler {
-    service: BoxCloneService<Request<Bytes>, (), Infallible>,
-    recv_stream: FramedRead<RecvStream, LengthDelimitedCodec>,
-}
-
-impl UniStreamRequestHandler {
-    fn new(
-        service: BoxCloneService<Request<Bytes>, (), Infallible>,
-        recv_stream: RecvStream,
-    ) -> Self {
-        Self {
-            service,
-            recv_stream: FramedRead::new(recv_stream, network_message_frame_codec()),
-        }
-    }
-
-    async fn handle(self) {
-        if let Err(e) = self.do_handle().await {
-            warn!("handling request failed: {e}");
-        }
-    }
-
-    async fn do_handle(mut self) -> Result<()> {
-        //
-        // Read Request
-        //
-
-        let request = read_request(&mut self.recv_stream).await?;
-
-        // Issue request to configured Service
-        let _ = self.service.oneshot(request).await.expect("Infallible");
-
-        Ok(())
-    }
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
     use crate::{config::EndpointConfig, Result};
-    use futures::{future::join, stream::StreamExt};
     use tracing::trace;
-
-    #[tokio::test]
-    async fn uni_stream_handler() -> Result<()> {
-        let _gaurd = crate::init_tracing_for_testing();
-
-        let msg = b"hello";
-        let config_1 = EndpointConfig::random("test");
-        let (endpoint_1, _incoming_1) = Endpoint::new(config_1, "localhost:0")?;
-        let pubkey_1 = endpoint_1.config().keypair().public;
-
-        println!("1: {}", endpoint_1.local_addr());
-
-        let config_2 = EndpointConfig::random("test");
-        let (endpoint_2, mut incoming_2) = Endpoint::new(config_2, "localhost:0")?;
-        let pubkey_2 = endpoint_2.config().keypair().public;
-        let addr_2 = endpoint_2.local_addr();
-        println!("2: {}", endpoint_2.local_addr());
-
-        let peer_1 = async move {
-            let (connection, _, _) = endpoint_1.connect(addr_2).unwrap().await.unwrap();
-            assert_eq!(connection.peer_identity(), pubkey_2);
-            {
-                let request = Request::new(msg.as_ref().into());
-
-                let mut send_stream = FramedWrite::new(
-                    connection.open_uni().await.unwrap(),
-                    network_message_frame_codec(),
-                );
-                write_request(&mut send_stream, request).await.unwrap();
-                send_stream.get_mut().finish().await.unwrap();
-            }
-            endpoint_1.close();
-            // Result::<()>::Ok(())
-        };
-
-        let service = expect_uni_service(msg);
-
-        let peer_2 = async move {
-            let (connection, mut uni_streams, _bi_streams) =
-                incoming_2.next().await.unwrap().await.unwrap();
-            assert_eq!(connection.peer_identity(), pubkey_1);
-
-            let recv = uni_streams.next().await.unwrap().unwrap();
-            let request_handler = UniStreamRequestHandler::new(service, recv);
-            request_handler.do_handle().await.unwrap();
-            endpoint_2.close();
-            // Result::<()>::Ok(())
-        };
-
-        join(peer_1, peer_2).await;
-
-        Ok(())
-    }
-
-    fn expect_uni_service(
-        expected: &'static [u8],
-    ) -> BoxCloneService<Request<Bytes>, (), Infallible> {
-        let handle = move |request: Request<Bytes>| async move {
-            trace!("recieved: {}", request.body().escape_ascii());
-            assert_eq!(request.body().as_ref(), expected);
-            Result::<(), Infallible>::Ok(())
-        };
-
-        tower::service_fn(handle).boxed_clone()
-    }
 
     #[tokio::test]
     async fn basic_network() -> Result<()> {
@@ -586,13 +480,4 @@ mod test {
 
         tower::service_fn(handle).boxed_clone()
     }
-}
-
-fn noop_service() -> BoxCloneService<Request<Bytes>, (), Infallible> {
-    let handle = move |request: Request<Bytes>| async move {
-        trace!("recieved: {}", request.body().escape_ascii());
-        Result::<(), Infallible>::Ok(())
-    };
-
-    tower::service_fn(handle).boxed_clone()
 }
