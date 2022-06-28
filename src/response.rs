@@ -31,6 +31,7 @@ impl RawResponseHeader {
 pub enum StatusCode {
     Success = 200,
     BadRequest = 400,
+    NotFound = 404,
     InternalServerError = 500,
     VersionNotSupported = 505,
 }
