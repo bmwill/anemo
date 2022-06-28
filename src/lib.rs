@@ -8,6 +8,7 @@ mod network;
 mod peer;
 mod request;
 mod response;
+mod routing;
 mod wire;
 
 pub use common::{ConnectionOrigin, PeerId};
@@ -18,6 +19,7 @@ pub use error::{Error, Result};
 pub use network::Network;
 pub use request::Request;
 pub use response::Response;
+pub use routing::Router;
 pub use wire::HeaderMap;
 
 #[cfg(test)]
