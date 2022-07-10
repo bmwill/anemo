@@ -26,7 +26,7 @@ impl RawResponseHeader {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u16)]
 pub enum StatusCode {
     Success = 200,

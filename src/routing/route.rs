@@ -6,6 +6,7 @@ use tower::{
     Service, ServiceExt,
 };
 
+#[derive(Clone)]
 pub(super) struct Route(BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>);
 
 impl Route {
