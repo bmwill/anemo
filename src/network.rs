@@ -92,7 +92,7 @@ impl Network {
 
 struct NetworkInner {
     endpoint: Endpoint,
-    connections: RwLock<HashMap<PeerId, Connection>>,
+    connections: Arc<RwLock<HashMap<PeerId, Connection>>>,
     //TODO these shouldn't need to be wrapped in mutexes
     on_bi: Mutex<BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>>,
 }
@@ -234,8 +234,13 @@ impl NetworkInner {
                 entry.insert(connection);
             }
         }
-        let request_handler =
-            InboundRequestHandler::new(self.on_bi.lock().clone(), incoming_uni, incoming_bi);
+        let request_handler = InboundRequestHandler::new(
+            self.connections.clone(),
+            peer_id,
+            self.on_bi.lock().clone(),
+            incoming_uni,
+            incoming_bi,
+        );
 
         tokio::spawn(request_handler.start());
     }
@@ -317,6 +322,8 @@ impl InboundConnectionHandler {
 }
 
 struct InboundRequestHandler {
+    connections: Arc<RwLock<HashMap<PeerId, Connection>>>,
+    peer_id: PeerId,
     service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
     incoming_bi: Fuse<IncomingBiStreams>,
     incoming_uni: Fuse<IncomingUniStreams>,
@@ -324,11 +331,15 @@ struct InboundRequestHandler {
 
 impl InboundRequestHandler {
     fn new(
+        connections: Arc<RwLock<HashMap<PeerId, Connection>>>,
+        peer_id: PeerId,
         service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
         incoming_uni: IncomingUniStreams,
         incoming_bi: IncomingBiStreams,
     ) -> Self {
         Self {
+            connections,
+            peer_id,
             service,
             incoming_uni: incoming_uni.fuse(),
             incoming_bi: incoming_bi.fuse(),
@@ -336,7 +347,7 @@ impl InboundRequestHandler {
     }
 
     async fn start(mut self) {
-        info!("InboundRequestHandler started");
+        info!(peer =% self.peer_id, "InboundRequestHandler started");
 
         let mut inflight_requests = FuturesUnordered::new();
 
@@ -347,7 +358,10 @@ impl InboundRequestHandler {
                 uni = self.incoming_uni.select_next_some() => {
                     match uni {
                         Ok(recv_stream) => trace!("incoming uni stream! {}", recv_stream.id()),
-                        Err(e) => trace!("error listening for incoming uni streams: {e}"),
+                        Err(e) => {
+                            warn!("error listening for incoming uni streams: {e}");
+                            break;
+                        }
                     }
                 },
                 bi = self.incoming_bi.select_next_some() => {
@@ -358,12 +372,19 @@ impl InboundRequestHandler {
                                 BiStreamRequestHandler::new(self.service.clone(), bi_tx, bi_rx);
                             inflight_requests.push(request_handler.handle());
                         }
-                        Err(e) => trace!("error listening for incoming bi streams: {e}"),
+                        Err(e) => {
+                            warn!("error listening for incoming bi streams: {e}");
+                            break;
+                        }
                     }
                 },
                 () = inflight_requests.select_next_some() => {},
                 complete => break,
             }
+        }
+
+        if let Some(connection) = self.connections.write().remove(&self.peer_id) {
+            connection.close();
         }
 
         info!("InboundRequestHandler ended");
