@@ -41,6 +41,10 @@ impl Default for Version {
 
 pub type HeaderMap = HashMap<String, String>;
 
+pub mod header {
+    pub const CONTENT_TYPE: &str = "content-type";
+}
+
 pub(crate) async fn read_version_frame<T: AsyncRead + Unpin>(
     recv_stream: &mut T,
 ) -> Result<Version> {
