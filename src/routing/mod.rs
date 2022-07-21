@@ -219,3 +219,24 @@ mod test {
         tower::service_fn(handle).boxed_clone()
     }
 }
+
+// TODO
+// In the future we should add support for applications to leaverage QUIC's capability of having
+// unidirectional streams by having the "service" that is provided implement for Request as well as
+// for Message input types
+//
+// pub struct Message<T> {
+//     inner: Request<T>,
+// }
+//
+// This is an example of a trait bound we could use
+// fn route<T>(service: T)
+// where
+//     T: Clone + Send + 'static,
+//     T: Service<Request<Bytes>, Response = Response<Bytes>, Error = Infallible>,
+//     <T as Service<Request<Bytes>>>::Future: Send + 'static,
+//     T: Service<Message<Bytes>, Response = (), Error = Infallible>,
+//     <T as Service<Message<Bytes>>>::Future: Send + 'static,
+// {
+//     todo!()
+// }
