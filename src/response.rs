@@ -34,6 +34,7 @@ pub enum StatusCode {
     NotFound = 404,
     InternalServerError = 500,
     VersionNotSupported = 505,
+    Unknown = 520,
 }
 
 impl StatusCode {
