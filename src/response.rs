@@ -53,6 +53,10 @@ impl StatusCode {
     pub fn to_u16(self) -> u16 {
         self as u16
     }
+
+    pub fn is_success(self) -> bool {
+        matches!(self, StatusCode::Success)
+    }
 }
 
 impl Default for StatusCode {
