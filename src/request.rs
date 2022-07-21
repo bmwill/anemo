@@ -96,3 +96,20 @@ impl<T> Request<T> {
         }
     }
 }
+
+pub trait IntoRequest<T> {
+    /// Wrap the input message `T` in a `Request`
+    fn into_request(self) -> Request<T>;
+}
+
+impl<T> IntoRequest<T> for T {
+    fn into_request(self) -> Request<Self> {
+        Request::new(self)
+    }
+}
+
+impl<T> IntoRequest<T> for Request<T> {
+    fn into_request(self) -> Request<T> {
+        self
+    }
+}
