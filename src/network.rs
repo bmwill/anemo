@@ -501,4 +501,39 @@ mod test {
 
         tower::service_fn(handle).boxed_clone()
     }
+
+    #[tokio::test]
+    async fn ip6_calling_ip4() -> Result<()> {
+        let _gaurd = crate::init_tracing_for_testing();
+
+        let config = EndpointConfig::random("test");
+        let (endpoint, incoming) = Endpoint::new(config, "[::]:0")?;
+        info!(
+            address =% endpoint.local_addr(),
+            peer_id =% endpoint.peer_id(),
+            "starting network"
+        );
+
+        let network_1 = Network::start(endpoint, incoming, echo_service());
+
+        let config = EndpointConfig::random("test");
+        let (endpoint, incoming) = Endpoint::new(config, "127.0.0.1:0")?;
+        info!(
+            address =% endpoint.local_addr(),
+            peer_id =% endpoint.peer_id(),
+            "starting network"
+        );
+
+        let network_2 = Network::start(endpoint, incoming, echo_service());
+
+        let msg = b"The Way of Kings";
+        let peer = network_1.connect(network_2.local_addr()).await?;
+        let response = network_1
+            .rpc(peer, Request::new(msg.as_ref().into()))
+            .await?;
+
+        println!("{}", response.body().escape_ascii());
+
+        Ok(())
+    }
 }
