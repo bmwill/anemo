@@ -152,11 +152,11 @@ pub struct EndpointConfig {
 }
 
 impl EndpointConfig {
-    /// Default for [`EndpointConfig::idle_timeout`] (1 minute).
+    /// Default for [`EndpointConfig::idle_timeout`] (30 seconds).
     ///
     /// This is based on average time in which routers would close the UDP mapping to the peer if they
     /// see no conversation between them.
-    pub const DEFAULT_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
+    pub const DEFAULT_IDLE_TIMEOUT: Duration = Duration::from_secs(30);
 
     pub fn builder() -> EndpointConfigBuilder {
         EndpointConfigBuilder::new()
