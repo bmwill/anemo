@@ -377,7 +377,7 @@ impl InboundRequestHandler {
                         Ok((bi_tx, bi_rx)) => {
                             info!("incoming bi stream! {}", bi_tx.id());
                             let request_handler =
-                                BiStreamRequestHandler::new(self.service.clone(), bi_tx, bi_rx);
+                                BiStreamRequestHandler::new(self.peer_id, self.service.clone(), bi_tx, bi_rx);
                             inflight_requests.push(request_handler.handle());
                         }
                         Err(e) => {
@@ -412,6 +412,7 @@ pub(crate) fn network_message_frame_codec() -> LengthDelimitedCodec {
 }
 
 struct BiStreamRequestHandler {
+    peer_id: PeerId,
     service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
     send_stream: FramedWrite<SendStream, LengthDelimitedCodec>,
     recv_stream: FramedRead<RecvStream, LengthDelimitedCodec>,
@@ -419,11 +420,13 @@ struct BiStreamRequestHandler {
 
 impl BiStreamRequestHandler {
     fn new(
+        peer_id: PeerId,
         service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
         send_stream: SendStream,
         recv_stream: RecvStream,
     ) -> Self {
         Self {
+            peer_id,
             service,
             send_stream: FramedWrite::new(send_stream, network_message_frame_codec()),
             recv_stream: FramedRead::new(recv_stream, network_message_frame_codec()),
@@ -441,7 +444,10 @@ impl BiStreamRequestHandler {
         // Read Request
         //
 
-        let request = read_request(&mut self.recv_stream).await?;
+        let mut request = read_request(&mut self.recv_stream).await?;
+
+        // Set the PeerId of this peer
+        request.extensions_mut().insert(self.peer_id);
 
         // Issue request to configured Service
         let response = self.service.oneshot(request).await.expect("Infallible");

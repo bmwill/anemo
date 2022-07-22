@@ -1,6 +1,7 @@
-use crate::{wire::Version, HeaderMap, Result};
+use crate::{wire::Version, HeaderMap, PeerId, Result};
 
 #[derive(Default)]
+#[non_exhaustive]
 pub struct ResponseHeader {
     pub status: StatusCode,
 
@@ -8,6 +9,9 @@ pub struct ResponseHeader {
     pub version: Version,
 
     pub headers: HeaderMap,
+
+    /// The request's extensions
+    pub extensions: http::Extensions,
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -97,6 +101,19 @@ impl<T> Response<T> {
 
     pub fn headers_mut(&mut self) -> &mut HeaderMap {
         &mut self.head.headers
+    }
+
+    pub fn extensions(&self) -> &http::Extensions {
+        &self.head.extensions
+    }
+
+    pub fn extensions_mut(&mut self) -> &mut http::Extensions {
+        &mut self.head.extensions
+    }
+
+    // Returns the PeerId of the peer who created this Response
+    pub fn peer_id(&self) -> Option<&PeerId> {
+        self.head.extensions.get::<PeerId>()
     }
 
     pub fn body(&self) -> &T {

@@ -42,7 +42,10 @@ impl<'network> Peer<'network> {
         // Read Response
         //
 
-        let response = read_response(&mut recv_stream).await?;
+        let mut response = read_response(&mut recv_stream).await?;
+
+        // Set the PeerId of this peer
+        response.extensions_mut().insert(self.peer_identity());
 
         Ok(response)
     }

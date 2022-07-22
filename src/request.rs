@@ -1,5 +1,6 @@
-use crate::{wire::Version, HeaderMap};
+use crate::{wire::Version, HeaderMap, PeerId};
 
+#[non_exhaustive]
 pub struct RequestHeader {
     pub route: String,
 
@@ -8,6 +9,9 @@ pub struct RequestHeader {
 
     /// The request's headers
     pub headers: HeaderMap,
+
+    /// The request's extensions
+    pub extensions: http::Extensions,
 }
 
 impl Default for RequestHeader {
@@ -16,6 +20,7 @@ impl Default for RequestHeader {
             route: "/".into(),
             version: Default::default(),
             headers: Default::default(),
+            extensions: Default::default(),
         }
     }
 }
@@ -68,6 +73,19 @@ impl<T> Request<T> {
 
     pub fn headers_mut(&mut self) -> &mut HeaderMap {
         &mut self.head.headers
+    }
+
+    pub fn extensions(&self) -> &http::Extensions {
+        &self.head.extensions
+    }
+
+    pub fn extensions_mut(&mut self) -> &mut http::Extensions {
+        &mut self.head.extensions
+    }
+
+    // Returns the PeerId of the peer who created this Request
+    pub fn peer_id(&self) -> Option<&PeerId> {
+        self.head.extensions.get::<PeerId>()
     }
 
     pub fn body(&self) -> &T {
