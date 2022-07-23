@@ -1,6 +1,6 @@
 use crate::{
     peer::Peer,
-    wire::{read_request, read_response, write_request, write_response},
+    wire::{read_request, write_response},
     Connection, ConnectionOrigin, Endpoint, Incoming, PeerId, Request, Response, Result,
 };
 use anyhow::anyhow;
@@ -84,10 +84,6 @@ impl Network {
         self.0.rpc_with_addr(addr, request).await
     }
 
-    pub async fn send_message(&self, peer: PeerId, request: Request<Bytes>) -> Result<()> {
-        self.0.send_message(peer, request).await
-    }
-
     /// Returns the socket address that this Network is listening on
     pub fn local_addr(&self) -> SocketAddr {
         self.0.local_addr()
@@ -138,14 +134,11 @@ impl NetworkInner {
         Some(Peer::new(connection))
     }
 
-    async fn rpc(&self, peer: PeerId, request: Request<Bytes>) -> Result<Response<Bytes>> {
-        let connection = self
-            .connections
-            .read()
-            .get(&peer)
-            .ok_or_else(|| anyhow!("not connected to peer {peer}"))?
-            .clone();
-        Self::do_rpc(connection, request).await
+    async fn rpc(&self, peer_id: PeerId, request: Request<Bytes>) -> Result<Response<Bytes>> {
+        self.peer(peer_id)
+            .ok_or_else(|| anyhow!("not connected to peer {peer_id}"))?
+            .rpc(request)
+            .await
     }
 
     async fn rpc_with_addr(
@@ -166,50 +159,15 @@ impl NetworkInner {
             self.connections.read().get(&peer_id).unwrap().clone()
         };
 
-        Self::do_rpc(connection, request).await
+        Peer::new(connection).rpc(request).await
     }
 
-    async fn do_rpc(connection: Connection, request: Request<Bytes>) -> Result<Response<Bytes>> {
-        let (send_stream, recv_stream) = connection.open_bi().await?;
-        let mut send_stream = FramedWrite::new(send_stream, network_message_frame_codec());
-        let mut recv_stream = FramedRead::new(recv_stream, network_message_frame_codec());
-
-        //
-        // Write Request
-        //
-
-        write_request(&mut send_stream, request).await?;
-        send_stream.get_mut().finish().await?;
-
-        //
-        // Read Response
-        //
-
-        let response = read_response(&mut recv_stream).await?;
-
-        Ok(response)
-    }
-
-    async fn send_message(&self, peer: PeerId, request: Request<Bytes>) -> Result<()> {
-        let connection = self
-            .connections
-            .read()
-            .get(&peer)
-            .ok_or_else(|| anyhow!("not connected to peer {peer}"))?
-            .clone();
-
-        let send_stream = connection.open_uni().await?;
-        let mut send_stream = FramedWrite::new(send_stream, network_message_frame_codec());
-
-        //
-        // Write Request
-        //
-
-        write_request(&mut send_stream, request).await?;
-        send_stream.get_mut().finish().await?;
-
-        Ok(())
-    }
+    // async fn send_message(&self, peer_id: PeerId, message: Request<Bytes>) -> Result<()> {
+    //     self.peer(peer_id)
+    //         .ok_or_else(|| anyhow!("not connected to peer {peer_id}"))?
+    //         .message(message)
+    //         .await
+    // }
 
     fn add_peer(
         &self,

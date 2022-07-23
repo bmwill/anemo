@@ -49,6 +49,21 @@ impl<'network> Peer<'network> {
 
         Ok(response)
     }
+
+    #[allow(dead_code)]
+    async fn message(&self, message: Request<Bytes>) -> Result<()> {
+        let send_stream = self.connection.open_uni().await?;
+        let mut send_stream = FramedWrite::new(send_stream, network_message_frame_codec());
+
+        //
+        // Write Request
+        //
+
+        write_request(&mut send_stream, message).await?;
+        send_stream.get_mut().finish().await?;
+
+        Ok(())
+    }
 }
 
 impl<'network> Service<Request<Bytes>> for Peer<'network> {
