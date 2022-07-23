@@ -3,6 +3,7 @@ use crate::{
     PeerId,
 };
 
+#[derive(Debug)]
 #[non_exhaustive]
 pub struct RequestHeader {
     pub route: String,
@@ -55,6 +56,7 @@ impl RawRequestHeader {
     }
 }
 
+#[derive(Debug)]
 pub struct Request<T> {
     head: RequestHeader,
     body: T,
@@ -145,3 +147,12 @@ impl<T> IntoRequest<T> for Request<T> {
         self
     }
 }
+
+impl<T> IntoRequest<T> for Message<T> {
+    fn into_request(self) -> Request<T> {
+        self.0
+    }
+}
+
+#[derive(Debug)]
+pub struct Message<T>(Request<T>);

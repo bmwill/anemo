@@ -1,5 +1,6 @@
 use crate::{
     network::network_message_frame_codec,
+    types::request::{IntoRequest, Message},
     wire::{read_response, write_request},
     Connection, PeerId, Request, Response, Result,
 };
@@ -51,8 +52,7 @@ impl<'network> Peer<'network> {
         Ok(response)
     }
 
-    #[allow(dead_code)]
-    async fn message(&self, message: Request<Bytes>) -> Result<()> {
+    async fn message(&self, message: Message<Bytes>) -> Result<()> {
         let send_stream = self.connection.open_uni().await?;
         let mut send_stream = FramedWrite::new(send_stream, network_message_frame_codec());
 
@@ -60,7 +60,7 @@ impl<'network> Peer<'network> {
         // Write Request
         //
 
-        write_request(&mut send_stream, message).await?;
+        write_request(&mut send_stream, message.into_request()).await?;
         send_stream.get_mut().finish().await?;
 
         Ok(())
@@ -84,5 +84,25 @@ impl<'network> Service<Request<Bytes>> for Peer<'network> {
     fn call(&mut self, request: Request<Bytes>) -> Self::Future {
         let peer = self.clone();
         Box::pin(async move { peer.rpc(request).await })
+    }
+}
+
+impl<'network> Service<Message<Bytes>> for Peer<'network> {
+    type Response = ();
+    type Error = crate::Error;
+    type Future = BoxFuture<'network, Result<Self::Response, Self::Error>>;
+
+    #[inline]
+    fn poll_ready(
+        &mut self,
+        _: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
+        std::task::Poll::Ready(Ok(()))
+    }
+
+    #[inline]
+    fn call(&mut self, request: Message<Bytes>) -> Self::Future {
+        let peer = self.clone();
+        Box::pin(async move { peer.message(request).await })
     }
 }
