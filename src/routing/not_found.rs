@@ -1,5 +1,5 @@
-use crate::response::IntoResponse;
-use crate::response::StatusCode;
+use crate::types::response::IntoResponse;
+use crate::types::response::StatusCode;
 use crate::Request;
 use crate::Response;
 use bytes::Bytes;

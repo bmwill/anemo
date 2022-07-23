@@ -1,4 +1,4 @@
-use crate::{wire::Version, HeaderMap, PeerId};
+use crate::{types::HeaderMap, types::Version, PeerId};
 
 #[non_exhaustive]
 pub struct RequestHeader {
@@ -20,6 +20,17 @@ impl Default for RequestHeader {
             route: "/".into(),
             version: Default::default(),
             headers: Default::default(),
+            extensions: Default::default(),
+        }
+    }
+}
+
+impl RequestHeader {
+    pub(crate) fn from_raw(raw_header: RawRequestHeader, version: Version) -> Self {
+        Self {
+            route: raw_header.route,
+            version,
+            headers: raw_header.headers,
             extensions: Default::default(),
         }
     }

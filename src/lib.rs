@@ -1,4 +1,3 @@
-mod common;
 mod config;
 mod connection;
 mod crypto;
@@ -6,21 +5,17 @@ mod endpoint;
 mod error;
 mod network;
 mod peer;
-mod request;
-mod response;
 mod routing;
+pub mod types;
 mod wire;
 
-pub use common::{ConnectionOrigin, PeerId};
 pub use config::{EndpointConfig, EndpointConfigBuilder};
 pub use connection::Connection;
 pub use endpoint::{Connecting, Endpoint, Incoming};
 pub use error::{Error, Result};
 pub use network::Network;
-pub use request::Request;
-pub use response::Response;
 pub use routing::Router;
-pub use wire::HeaderMap;
+pub use types::{request::Request, response::Response, ConnectionOrigin, PeerId};
 
 #[cfg(test)]
 pub fn init_tracing_for_testing() -> ::tracing::dispatcher::DefaultGuard {

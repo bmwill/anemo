@@ -1,49 +1,18 @@
 // Wire format
 
 use crate::{
-    request::{RawRequestHeader, RequestHeader},
-    response::{RawResponseHeader, ResponseHeader, StatusCode},
+    types::request::{RawRequestHeader, RequestHeader},
+    types::response::{RawResponseHeader, ResponseHeader},
+    types::Version,
     Request, Response, Result,
 };
 use anyhow::{anyhow, bail};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use futures::{SinkExt, StreamExt};
-use std::collections::HashMap;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
 
 const ANEMO: &[u8; 5] = b"anemo";
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-#[repr(u16)]
-pub enum Version {
-    V1 = 1,
-}
-
-impl Version {
-    pub fn new(version: u16) -> Result<Self> {
-        match version {
-            1 => Ok(Version::V1),
-            _ => Err(anyhow::anyhow!("invalid version {}", version)),
-        }
-    }
-
-    pub fn to_u16(self) -> u16 {
-        self as u16
-    }
-}
-
-impl Default for Version {
-    fn default() -> Self {
-        Self::V1
-    }
-}
-
-pub type HeaderMap = HashMap<String, String>;
-
-pub mod header {
-    pub const CONTENT_TYPE: &str = "content-type";
-}
 
 pub(crate) async fn read_version_frame<T: AsyncRead + Unpin>(
     recv_stream: &mut T,
@@ -127,11 +96,7 @@ pub(crate) async fn read_request<T: AsyncRead + Unpin>(
         .await
         .ok_or_else(|| anyhow!("unexpected EOF"))??;
     let raw_header: RawRequestHeader = bincode::deserialize_from(header_buf.reader())?;
-    let request_header = RequestHeader {
-        route: raw_header.route,
-        version,
-        headers: raw_header.headers,
-    };
+    let request_header = RequestHeader::from_raw(raw_header, version);
 
     // Read Body
     let body = recv_stream
@@ -156,11 +121,7 @@ pub(crate) async fn read_response<T: AsyncRead + Unpin>(
         .await
         .ok_or_else(|| anyhow!("unexpected EOF"))??;
     let raw_header: RawResponseHeader = bincode::deserialize_from(header_buf.reader())?;
-    let response_header = ResponseHeader {
-        status: StatusCode::new(raw_header.status)?,
-        version,
-        headers: raw_header.headers,
-    };
+    let response_header = ResponseHeader::from_raw(raw_header, version)?;
 
     // Read Body
     let body = recv_stream

@@ -1,4 +1,4 @@
-use crate::{wire::Version, HeaderMap, PeerId, Result};
+use crate::{types::HeaderMap, types::Version, PeerId, Result};
 
 #[derive(Default)]
 #[non_exhaustive]
@@ -12,6 +12,17 @@ pub struct ResponseHeader {
 
     /// The request's extensions
     pub extensions: http::Extensions,
+}
+
+impl ResponseHeader {
+    pub(crate) fn from_raw(raw_header: RawResponseHeader, version: Version) -> Result<Self> {
+        Ok(Self {
+            status: StatusCode::new(raw_header.status)?,
+            version,
+            headers: raw_header.headers,
+            extensions: Default::default(),
+        })
+    }
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]

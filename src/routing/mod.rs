@@ -114,7 +114,7 @@ impl Service<Request<Bytes>> for Router {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::response::{IntoResponse, StatusCode};
+    use crate::types::response::{IntoResponse, StatusCode};
     use tower::{util::BoxCloneService, ServiceExt};
     use tracing::trace;
 
