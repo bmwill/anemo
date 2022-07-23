@@ -1,4 +1,7 @@
-use crate::{types::HeaderMap, types::Version, PeerId};
+use crate::{
+    types::{HeaderMap, Version},
+    PeerId,
+};
 
 #[non_exhaustive]
 pub struct RequestHeader {

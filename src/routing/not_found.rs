@@ -1,7 +1,7 @@
-use crate::types::response::IntoResponse;
-use crate::types::response::StatusCode;
-use crate::Request;
-use crate::Response;
+use crate::{
+    types::response::{IntoResponse, StatusCode},
+    Request, Response,
+};
 use bytes::Bytes;
 use std::convert::Infallible;
 use tower::Service;

@@ -1,7 +1,8 @@
-use crate::network::network_message_frame_codec;
-use crate::wire::{read_response, write_request};
-use crate::{Connection, PeerId, Request};
-use crate::{Response, Result};
+use crate::{
+    network::network_message_frame_codec,
+    wire::{read_response, write_request},
+    Connection, PeerId, Request, Response, Result,
+};
 use bytes::Bytes;
 use futures::future::BoxFuture;
 use std::marker::PhantomData;

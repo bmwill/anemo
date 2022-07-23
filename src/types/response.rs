@@ -1,4 +1,7 @@
-use crate::{types::HeaderMap, types::Version, PeerId, Result};
+use crate::{
+    types::{HeaderMap, Version},
+    PeerId, Result,
+};
 
 #[derive(Default)]
 #[non_exhaustive]

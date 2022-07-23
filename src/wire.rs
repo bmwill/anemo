@@ -1,9 +1,11 @@
 // Wire format
 
 use crate::{
-    types::request::{RawRequestHeader, RequestHeader},
-    types::response::{RawResponseHeader, ResponseHeader},
-    types::Version,
+    types::{
+        request::{RawRequestHeader, RequestHeader},
+        response::{RawResponseHeader, ResponseHeader},
+        Version,
+    },
     Request, Response, Result,
 };
 use anyhow::{anyhow, bail};
