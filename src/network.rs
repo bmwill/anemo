@@ -444,7 +444,10 @@ impl BiStreamRequestHandler {
 mod test {
     use super::*;
     use crate::{config::EndpointConfig, Result};
-    use std::time::Duration;
+    use std::{
+        net::{Ipv4Addr, SocketAddrV4},
+        time::Duration,
+    };
     use tracing::trace;
 
     #[tokio::test]
@@ -522,6 +525,53 @@ mod test {
         let peer = network_1.connect(network_2.local_addr()).await?;
         let response = network_1
             .rpc(peer, Request::new(msg.as_ref().into()))
+            .await?;
+
+        println!("{}", response.body().escape_ascii());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn localhost_calling_anyaddr() -> Result<()> {
+        let _gaurd = crate::init_tracing_for_testing();
+
+        let config = EndpointConfig::random("test");
+        let (endpoint, incoming) = Endpoint::new(config, "0.0.0.0:0")?;
+        info!(
+            address =% endpoint.local_addr(),
+            peer_id =% endpoint.peer_id(),
+            "starting network"
+        );
+
+        let network_1 = Network::start(endpoint, incoming, echo_service());
+
+        let config = EndpointConfig::random("test");
+        let (endpoint, incoming) = Endpoint::new(config, "127.0.0.1:0")?;
+        info!(
+            address =% endpoint.local_addr(),
+            peer_id =% endpoint.peer_id(),
+            "starting network"
+        );
+
+        let network_2 = Network::start(endpoint, incoming, echo_service());
+
+        let msg = b"The Way of Kings";
+        let peer = network_2
+            .connect(SocketAddr::V4(SocketAddrV4::new(
+                Ipv4Addr::LOCALHOST,
+                network_1.local_addr().port(),
+            )))
+            .await?;
+
+        let response = network_2
+            .rpc(peer, Request::new(msg.as_ref().into()))
+            .await?;
+
+        println!("{}", response.body().escape_ascii());
+
+        let response = network_1
+            .rpc(network_2.peer_id(), Request::new(msg.as_ref().into()))
             .await?;
 
         println!("{}", response.body().escape_ascii());
