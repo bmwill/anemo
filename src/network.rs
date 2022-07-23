@@ -1,4 +1,5 @@
 use crate::{
+    endpoint::NewConnection,
     peer::Peer,
     wire::{read_request, write_response},
     Connection, ConnectionOrigin, Endpoint, Incoming, PeerId, Request, Response, Result,
@@ -10,7 +11,7 @@ use futures::{
     StreamExt,
 };
 use parking_lot::{Mutex, RwLock};
-use quinn::{IncomingBiStreams, IncomingUniStreams, RecvStream, SendStream};
+use quinn::{Datagrams, IncomingBiStreams, IncomingUniStreams, RecvStream, SendStream};
 use std::{
     collections::{hash_map::Entry, HashMap},
     convert::Infallible,
@@ -116,9 +117,9 @@ impl NetworkInner {
     }
 
     async fn connect(&self, addr: SocketAddr) -> Result<PeerId> {
-        let (connection, incoming_uni, incoming_bi) = self.endpoint.connect(addr)?.await?;
-        let peer_id = PeerId(connection.peer_identity());
-        self.add_peer(connection, incoming_uni, incoming_bi);
+        let new_connection = self.endpoint.connect(addr)?.await?;
+        let peer_id = PeerId(new_connection.connection.peer_identity());
+        self.add_peer(new_connection);
         Ok(peer_id)
     }
 
@@ -171,9 +172,12 @@ impl NetworkInner {
 
     fn add_peer(
         &self,
-        connection: Connection,
-        incoming_uni: IncomingUniStreams,
-        incoming_bi: IncomingBiStreams,
+        NewConnection {
+            connection,
+            uni_streams,
+            bi_streams,
+            datagrams,
+        }: NewConnection,
     ) {
         // TODO drop Connection if you've somehow connected out ourself
 
@@ -204,8 +208,9 @@ impl NetworkInner {
             self.connections.clone(),
             peer_id,
             self.on_bi.lock().clone(),
-            incoming_uni,
-            incoming_bi,
+            uni_streams,
+            bi_streams,
+            datagrams,
         );
 
         tokio::spawn(request_handler.start());
@@ -270,9 +275,9 @@ impl InboundConnectionHandler {
                 },
                 maybe_connection = pending_connections.select_next_some() => {
                     match maybe_connection {
-                        Ok((connection, incoming_uni, incoming_bi)) => {
+                        Ok(new_connection) => {
                             info!("new connection complete");
-                            self.network.0.add_peer(connection, incoming_uni, incoming_bi);
+                            self.network.0.add_peer(new_connection);
                         }
                         Err(e) => {
                             error!("inbound connection failed: {e}");
@@ -293,6 +298,7 @@ struct InboundRequestHandler {
     service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
     incoming_bi: Fuse<IncomingBiStreams>,
     incoming_uni: Fuse<IncomingUniStreams>,
+    incoming_datagrams: Fuse<Datagrams>,
 }
 
 impl InboundRequestHandler {
@@ -302,6 +308,7 @@ impl InboundRequestHandler {
         service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
         incoming_uni: IncomingUniStreams,
         incoming_bi: IncomingBiStreams,
+        incoming_datagrams: Datagrams,
     ) -> Self {
         Self {
             connections,
@@ -309,6 +316,7 @@ impl InboundRequestHandler {
             service,
             incoming_uni: incoming_uni.fuse(),
             incoming_bi: incoming_bi.fuse(),
+            incoming_datagrams: incoming_datagrams.fuse(),
         }
     }
 
@@ -340,6 +348,17 @@ impl InboundRequestHandler {
                         }
                         Err(e) => {
                             warn!("error listening for incoming bi streams: {e}");
+                            break;
+                        }
+                    }
+                },
+                // anemo does not currently use datagrams so we can
+                // just ignore and drop the stream
+                datagram = self.incoming_datagrams.select_next_some() => {
+                    match datagram {
+                        Ok(datagram) => trace!("incoming datagram of length: {}", datagram.len()),
+                        Err(e) => {
+                            warn!("error listening for datagrams: {e}");
                             break;
                         }
                     }

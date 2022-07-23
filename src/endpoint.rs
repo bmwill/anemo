@@ -1,6 +1,6 @@
 use crate::{config::EndpointConfig, Connection, ConnectionOrigin, PeerId, Result};
 use futures::{FutureExt, StreamExt};
-use quinn::{IncomingBiStreams, IncomingUniStreams};
+use quinn::{Datagrams, IncomingBiStreams, IncomingUniStreams};
 use std::{
     future::Future,
     net::SocketAddr,
@@ -114,7 +114,7 @@ impl Connecting {
 }
 
 impl Future for Connecting {
-    type Output = Result<(Connection, IncomingUniStreams, IncomingBiStreams)>;
+    type Output = Result<NewConnection>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         self.inner.poll_unpin(cx).map(|result| {
@@ -123,17 +123,26 @@ impl Future for Connecting {
                      connection,
                      uni_streams,
                      bi_streams,
+                     datagrams,
                      ..
                  }| {
-                    Ok((
-                        Connection::new(connection, self.origin)?,
+                    Ok(NewConnection {
+                        connection: Connection::new(connection, self.origin)?,
                         uni_streams,
                         bi_streams,
-                    ))
+                        datagrams,
+                    })
                 },
             )
         })
     }
+}
+
+pub struct NewConnection {
+    pub connection: Connection,
+    pub uni_streams: IncomingUniStreams,
+    pub bi_streams: IncomingBiStreams,
+    pub datagrams: Datagrams,
 }
 
 #[cfg(test)]
@@ -160,7 +169,8 @@ mod test {
         println!("2: {}", endpoint_2.local_addr());
 
         let peer_1 = async move {
-            let (connection, _, _) = endpoint_1.connect(addr_2).unwrap().await.unwrap();
+            let NewConnection { connection, .. } =
+                endpoint_1.connect(addr_2).unwrap().await.unwrap();
             assert_eq!(connection.peer_identity(), pubkey_2);
             {
                 let mut send_stream = connection.open_uni().await.unwrap();
@@ -173,8 +183,11 @@ mod test {
         };
 
         let peer_2 = async move {
-            let (connection, mut uni_streams, _bi_streams) =
-                incoming_2.next().await.unwrap().await.unwrap();
+            let NewConnection {
+                connection,
+                mut uni_streams,
+                ..
+            } = incoming_2.next().await.unwrap().await.unwrap();
             assert_eq!(connection.peer_identity(), pubkey_1);
 
             let mut recv = uni_streams.next().await.unwrap().unwrap();
