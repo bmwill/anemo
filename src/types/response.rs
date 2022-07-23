@@ -3,7 +3,7 @@ use crate::{
     PeerId, Result,
 };
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 #[non_exhaustive]
 pub struct ResponseHeader {
     pub status: StatusCode,
@@ -83,6 +83,7 @@ impl Default for StatusCode {
     }
 }
 
+#[derive(Debug)]
 pub struct Response<T> {
     head: ResponseHeader,
     body: T,

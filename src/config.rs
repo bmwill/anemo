@@ -39,6 +39,25 @@ impl EndpointConfigBuilder {
         Default::default()
     }
 
+    pub fn server_name<T: Into<String>>(mut self, server_name: T) -> Self {
+        self.server_name = Some(server_name.into());
+        self
+    }
+
+    pub fn idle_timeout(mut self, duration: Duration) -> Self {
+        self.idle_timeout = Some(duration);
+        self
+    }
+
+    #[cfg(test)]
+    pub(crate) fn random_keypair(mut self) -> Self {
+        let mut rng = rand::thread_rng();
+        let keypair = ed25519_dalek::Keypair::generate(&mut rng);
+        self.keypair = Some(keypair);
+
+        self
+    }
+
     pub fn build(self) -> Result<EndpointConfig> {
         let keypair = self.keypair.unwrap();
         let server_name = self.server_name.unwrap();
@@ -180,14 +199,11 @@ impl EndpointConfig {
 
     #[cfg(test)]
     pub(crate) fn random(server_name: &str) -> Self {
-        let mut rng = rand::thread_rng();
-        let keypair = ed25519_dalek::Keypair::generate(&mut rng);
-
-        let mut builder = Self::builder();
-        builder.keypair = Some(keypair);
-        builder.server_name = Some(server_name.to_owned());
-
-        builder.build().unwrap()
+        Self::builder()
+            .random_keypair()
+            .server_name(server_name)
+            .build()
+            .unwrap()
     }
 }
 

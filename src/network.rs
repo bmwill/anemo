@@ -444,6 +444,7 @@ impl BiStreamRequestHandler {
 mod test {
     use super::*;
     use crate::{config::EndpointConfig, Result};
+    use std::time::Duration;
     use tracing::trace;
 
     #[tokio::test]
@@ -524,6 +525,53 @@ mod test {
             .await?;
 
         println!("{}", response.body().escape_ascii());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn dropped_connection() -> Result<()> {
+        let _gaurd = crate::init_tracing_for_testing();
+
+        let config = EndpointConfig::builder()
+            .random_keypair()
+            .server_name("test")
+            .idle_timeout(Duration::from_secs(1))
+            .build()?;
+        let (endpoint, incoming) = Endpoint::new(config, "localhost:0")?;
+        info!(
+            address =% endpoint.local_addr(),
+            peer_id =% endpoint.peer_id(),
+            "starting network"
+        );
+
+        let network_1 = Network::start(endpoint, incoming, echo_service());
+
+        let config = EndpointConfig::random("test");
+        let (endpoint, incoming) = Endpoint::new(config, "localhost:0")?;
+        info!(
+            address =% endpoint.local_addr(),
+            peer_id =% endpoint.peer_id(),
+            "starting network"
+        );
+
+        let network_2 = Network::start(endpoint, incoming, echo_service());
+
+        let msg = b"The Way of Kings";
+        let peer = network_1.connect(network_2.local_addr()).await?;
+        let response = network_1
+            .rpc(peer, Request::new(msg.as_ref().into()))
+            .await?;
+
+        println!("{}", response.body().escape_ascii());
+
+        let peer = network_1.peer(peer).unwrap();
+
+        network_2.0.endpoint.close();
+
+        peer.rpc(Request::new(msg.as_ref().into()))
+            .await
+            .unwrap_err();
 
         Ok(())
     }
