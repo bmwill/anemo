@@ -8,6 +8,9 @@ pub struct Connection {
     inner: quinn::Connection,
     peer_identity: ed25519_dalek::PublicKey,
     origin: ConnectionOrigin,
+
+    // Time that the connection was established
+    time_established: std::time::Instant,
 }
 
 impl Connection {
@@ -17,6 +20,7 @@ impl Connection {
             inner,
             peer_identity,
             origin,
+            time_established: std::time::Instant::now(),
         })
     }
 
@@ -48,6 +52,11 @@ impl Connection {
     /// Origin of the Connection
     pub fn origin(&self) -> ConnectionOrigin {
         self.origin
+    }
+
+    /// Time the Connection was established
+    pub fn time_established(&self) -> std::time::Instant {
+        self.time_established
     }
 
     /// A stable identifier for this connection
