@@ -6,6 +6,7 @@ mod error;
 mod network;
 mod peer;
 mod routing;
+pub mod rpc;
 pub mod types;
 mod wire;
 
