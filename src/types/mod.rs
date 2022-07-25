@@ -35,3 +35,15 @@ pub mod header {
     pub const CONTENT_TYPE: &str = "content-type";
     pub const STATUS_MESSAGE: &str = "status-message";
 }
+
+#[derive(Debug, Clone)]
+pub enum PeerEvent {
+    NewPeer(PeerId),
+    LostPeer(PeerId, DisconnectReason),
+}
+
+#[derive(Debug, Clone)]
+pub enum DisconnectReason {
+    Requested,
+    ConnectionLost,
+}

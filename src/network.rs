@@ -42,15 +42,23 @@ impl Network {
         incoming: Incoming,
         rpc_service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
     ) -> Self {
+        let active_peers = ActivePeers::new(128);
+        let service = rpc_service.clone();
+
         let network = Self(Arc::new(NetworkInner {
             endpoint,
-            connections: Default::default(),
+            active_peers: Arc::new(RwLock::new(active_peers)),
             on_bi: Mutex::new(rpc_service),
         }));
 
         info!("Starting network");
 
-        let inbound_connection_handler = InboundConnectionHandler::new(network.clone(), incoming);
+        let inbound_connection_handler = ConnectionManager::new(
+            network.peer_id(),
+            network.0.active_peers.clone(),
+            incoming,
+            service,
+        );
 
         tokio::spawn(inbound_connection_handler.start());
 
@@ -77,14 +85,6 @@ impl Network {
         self.0.rpc(peer, request).await
     }
 
-    pub async fn rpc_with_addr(
-        &self,
-        addr: SocketAddr,
-        request: Request<Bytes>,
-    ) -> Result<Response<Bytes>> {
-        self.0.rpc_with_addr(addr, request).await
-    }
-
     /// Returns the socket address that this Network is listening on
     pub fn local_addr(&self) -> SocketAddr {
         self.0.local_addr()
@@ -95,16 +95,135 @@ impl Network {
     }
 }
 
+struct ActivePeers {
+    connections: HashMap<PeerId, Connection>,
+    peer_event_sender: tokio::sync::broadcast::Sender<crate::types::PeerEvent>,
+}
+
+impl ActivePeers {
+    pub fn new(channel_size: usize) -> Self {
+        let (sender, _reciever) = tokio::sync::broadcast::channel(channel_size);
+        Self {
+            connections: Default::default(),
+            peer_event_sender: sender,
+        }
+    }
+
+    #[allow(unused)]
+    pub fn subscribe(
+        &self,
+    ) -> (
+        tokio::sync::broadcast::Receiver<crate::types::PeerEvent>,
+        Vec<PeerId>,
+    ) {
+        let peers = self.peers();
+        let reciever = self.peer_event_sender.subscribe();
+        (reciever, peers)
+    }
+
+    pub fn peers(&self) -> Vec<PeerId> {
+        self.connections.keys().copied().collect()
+    }
+
+    pub fn get(&self, peer_id: &PeerId) -> Option<Connection> {
+        self.connections.get(peer_id).cloned()
+    }
+
+    pub fn remove(&mut self, peer_id: &PeerId, reason: crate::types::DisconnectReason) {
+        if let Some(connection) = self.connections.remove(peer_id) {
+            // maybe actually provide reason to other side?
+            connection.close();
+
+            self.send_event(crate::types::PeerEvent::LostPeer(*peer_id, reason));
+        }
+    }
+
+    fn send_event(&self, event: crate::types::PeerEvent) {
+        // We don't care if anyone is listening
+        let _ = self.peer_event_sender.send(event);
+    }
+
+    #[must_use]
+    pub fn add(
+        &mut self,
+        own_peer_id: &PeerId,
+        NewConnection {
+            connection,
+            uni_streams,
+            bi_streams,
+            datagrams,
+        }: NewConnection,
+    ) -> Option<(PeerId, IncomingUniStreams, IncomingBiStreams, Datagrams)> {
+        // TODO drop Connection if you've somehow connected out ourself
+
+        let peer_id = PeerId(connection.peer_identity());
+        match self.connections.entry(peer_id) {
+            Entry::Occupied(mut entry) => {
+                if Self::simultaneous_dial_tie_breaking(
+                    own_peer_id,
+                    &peer_id,
+                    entry.get().origin(),
+                    connection.origin(),
+                ) {
+                    info!("closing old connection with {peer_id:?} to mitigate simultaneous dial");
+                    let old_connection = entry.insert(connection);
+                    old_connection.close();
+                    self.send_event(crate::types::PeerEvent::LostPeer(
+                        peer_id,
+                        crate::types::DisconnectReason::Requested,
+                    ));
+                } else {
+                    info!("closing new connection with {peer_id:?} to mitigate simultaneous dial");
+                    connection.close();
+                    // Early return to avoid standing up Incoming Request handlers
+                    return None;
+                }
+            }
+            Entry::Vacant(entry) => {
+                entry.insert(connection);
+            }
+        }
+
+        self.send_event(crate::types::PeerEvent::NewPeer(peer_id));
+
+        Some((peer_id, uni_streams, bi_streams, datagrams))
+    }
+
+    /// In the event two peers simultaneously dial each other we need to be able to do
+    /// tie-breaking to determine which connection to keep and which to drop in a deterministic
+    /// way. One simple way is to compare our local PeerId with that of the remote's PeerId and
+    /// keep the connection where the peer with the greater PeerId is the dialer.
+    ///
+    /// Returns `true` if the existing connection should be dropped and `false` if the new
+    /// connection should be dropped.
+    fn simultaneous_dial_tie_breaking(
+        own_peer_id: &PeerId,
+        remote_peer_id: &PeerId,
+        existing_origin: ConnectionOrigin,
+        new_origin: ConnectionOrigin,
+    ) -> bool {
+        match (existing_origin, new_origin) {
+            // If the remote dials while an existing connection is open, the older connection is
+            // dropped.
+            (ConnectionOrigin::Inbound, ConnectionOrigin::Inbound) => true,
+            // We should never dial the same peer twice, but if we do drop the old connection
+            (ConnectionOrigin::Outbound, ConnectionOrigin::Outbound) => true,
+            (ConnectionOrigin::Inbound, ConnectionOrigin::Outbound) => remote_peer_id < own_peer_id,
+            (ConnectionOrigin::Outbound, ConnectionOrigin::Inbound) => own_peer_id < remote_peer_id,
+        }
+    }
+}
+
 struct NetworkInner {
     endpoint: Endpoint,
-    connections: Arc<RwLock<HashMap<PeerId, Connection>>>,
+    active_peers: Arc<RwLock<ActivePeers>>,
     //TODO these shouldn't need to be wrapped in mutexes
     on_bi: Mutex<BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>>,
 }
 
 impl NetworkInner {
     fn peers(&self) -> Vec<PeerId> {
-        self.connections.read().keys().copied().collect()
+        self.active_peers.read().peers()
     }
 
     /// Returns the socket address that this Network is listening on
@@ -123,15 +242,15 @@ impl NetworkInner {
         Ok(peer_id)
     }
 
-    fn disconnect(&self, peer: PeerId) -> Result<()> {
-        if let Some(connection) = self.connections.write().remove(&peer) {
-            connection.close();
-        }
+    fn disconnect(&self, peer_id: PeerId) -> Result<()> {
+        self.active_peers
+            .write()
+            .remove(&peer_id, crate::types::DisconnectReason::Requested);
         Ok(())
     }
 
     pub fn peer(&self, peer_id: PeerId) -> Option<Peer> {
-        let connection = self.connections.read().get(&peer_id)?.clone();
+        let connection = self.active_peers.read().get(&peer_id)?;
         Some(Peer::new(connection))
     }
 
@@ -142,27 +261,6 @@ impl NetworkInner {
             .await
     }
 
-    async fn rpc_with_addr(
-        &self,
-        addr: SocketAddr,
-        request: Request<Bytes>,
-    ) -> Result<Response<Bytes>> {
-        let maybe_connection = self
-            .connections
-            .read()
-            .values()
-            .find(|connection| connection.remote_address() == addr)
-            .cloned();
-        let connection = if let Some(connection) = maybe_connection {
-            connection
-        } else {
-            let peer_id = self.connect(addr).await?;
-            self.connections.read().get(&peer_id).unwrap().clone()
-        };
-
-        Peer::new(connection).rpc(request).await
-    }
-
     // async fn send_message(&self, peer_id: PeerId, message: Request<Bytes>) -> Result<()> {
     //     self.peer(peer_id)
     //         .ok_or_else(|| anyhow!("not connected to peer {peer_id}"))?
@@ -170,73 +268,22 @@ impl NetworkInner {
     //         .await
     // }
 
-    fn add_peer(
-        &self,
-        NewConnection {
-            connection,
-            uni_streams,
-            bi_streams,
-            datagrams,
-        }: NewConnection,
-    ) {
-        // TODO drop Connection if you've somehow connected out ourself
+    fn add_peer(&self, new_connection: NewConnection) {
+        if let Some((peer_id, uni_streams, bi_streams, datagrams)) = self
+            .active_peers
+            .write()
+            .add(&self.peer_id(), new_connection)
+        {
+            let request_handler = InboundRequestHandler::new(
+                self.active_peers.clone(),
+                peer_id,
+                self.on_bi.lock().clone(),
+                uni_streams,
+                bi_streams,
+                datagrams,
+            );
 
-        let peer_id = PeerId(connection.peer_identity());
-        match self.connections.write().entry(peer_id) {
-            Entry::Occupied(mut entry) => {
-                if Self::simultaneous_dial_tie_breaking(
-                    self.peer_id(),
-                    peer_id,
-                    entry.get().origin(),
-                    connection.origin(),
-                ) {
-                    info!("closing old connection with {peer_id:?} to mitigate simultaneous dial");
-                    let old_connection = entry.insert(connection);
-                    old_connection.close();
-                } else {
-                    info!("closing new connection with {peer_id:?} to mitigate simultaneous dial");
-                    connection.close();
-                    // Early return to avoid standing up Incoming Request handlers
-                    return;
-                }
-            }
-            Entry::Vacant(entry) => {
-                entry.insert(connection);
-            }
-        }
-        let request_handler = InboundRequestHandler::new(
-            self.connections.clone(),
-            peer_id,
-            self.on_bi.lock().clone(),
-            uni_streams,
-            bi_streams,
-            datagrams,
-        );
-
-        tokio::spawn(request_handler.start());
-    }
-
-    /// In the event two peers simultaneously dial each other we need to be able to do
-    /// tie-breaking to determine which connection to keep and which to drop in a deterministic
-    /// way. One simple way is to compare our local PeerId with that of the remote's PeerId and
-    /// keep the connection where the peer with the greater PeerId is the dialer.
-    ///
-    /// Returns `true` if the existing connection should be dropped and `false` if the new
-    /// connection should be dropped.
-    fn simultaneous_dial_tie_breaking(
-        own_peer_id: PeerId,
-        remote_peer_id: PeerId,
-        existing_origin: ConnectionOrigin,
-        new_origin: ConnectionOrigin,
-    ) -> bool {
-        match (existing_origin, new_origin) {
-            // If the remote dials while an existing connection is open, the older connection is
-            // dropped.
-            (ConnectionOrigin::Inbound, ConnectionOrigin::Inbound) => true,
-            // We should never dial the same peer twice, but if we do drop the old connection
-            (ConnectionOrigin::Outbound, ConnectionOrigin::Outbound) => true,
-            (ConnectionOrigin::Inbound, ConnectionOrigin::Outbound) => remote_peer_id < own_peer_id,
-            (ConnectionOrigin::Outbound, ConnectionOrigin::Inbound) => own_peer_id < remote_peer_id,
+            tokio::spawn(request_handler.start());
         }
     }
 }
@@ -247,23 +294,31 @@ impl Drop for NetworkInner {
     }
 }
 
-struct InboundConnectionHandler {
-    // TODO we probably don't want this to be Network but some other internal type that doesn't keep
-    // the network alive after the application layer drops the handle
-    network: Network,
+struct ConnectionManager {
+    own_peer_id: PeerId,
+    active_peers: Arc<RwLock<ActivePeers>>,
     incoming: Fuse<Incoming>,
+
+    service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
 }
 
-impl InboundConnectionHandler {
-    fn new(network: Network, incoming: Incoming) -> Self {
+impl ConnectionManager {
+    fn new(
+        own_peer_id: PeerId,
+        active_peers: Arc<RwLock<ActivePeers>>,
+        incoming: Incoming,
+        service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
+    ) -> Self {
         Self {
-            network,
+            own_peer_id,
+            active_peers,
             incoming: incoming.fuse(),
+            service,
         }
     }
 
     async fn start(mut self) {
-        info!("InboundConnectionHandler started");
+        info!("ConnectionManager started");
 
         let mut pending_connections = FuturesUnordered::new();
 
@@ -277,7 +332,7 @@ impl InboundConnectionHandler {
                     match maybe_connection {
                         Ok(new_connection) => {
                             info!("new connection complete");
-                            self.network.0.add_peer(new_connection);
+                            self.add_peer(new_connection);
                         }
                         Err(e) => {
                             error!("inbound connection failed: {e}");
@@ -288,12 +343,31 @@ impl InboundConnectionHandler {
             }
         }
 
-        info!("InboundConnectionHandler ended");
+        info!("ConnectionManager ended");
+    }
+
+    fn add_peer(&mut self, new_connection: NewConnection) {
+        if let Some((peer_id, uni_streams, bi_streams, datagrams)) = self
+            .active_peers
+            .write()
+            .add(&self.own_peer_id, new_connection)
+        {
+            let request_handler = InboundRequestHandler::new(
+                self.active_peers.clone(),
+                peer_id,
+                self.service.clone(),
+                uni_streams,
+                bi_streams,
+                datagrams,
+            );
+
+            tokio::spawn(request_handler.start());
+        }
     }
 }
 
 struct InboundRequestHandler {
-    connections: Arc<RwLock<HashMap<PeerId, Connection>>>,
+    active_peers: Arc<RwLock<ActivePeers>>,
     peer_id: PeerId,
     service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
     incoming_bi: Fuse<IncomingBiStreams>,
@@ -303,7 +377,7 @@ struct InboundRequestHandler {
 
 impl InboundRequestHandler {
     fn new(
-        connections: Arc<RwLock<HashMap<PeerId, Connection>>>,
+        active_peers: Arc<RwLock<ActivePeers>>,
         peer_id: PeerId,
         service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
         incoming_uni: IncomingUniStreams,
@@ -311,7 +385,7 @@ impl InboundRequestHandler {
         incoming_datagrams: Datagrams,
     ) -> Self {
         Self {
-            connections,
+            active_peers,
             peer_id,
             service,
             incoming_uni: incoming_uni.fuse(),
@@ -353,7 +427,7 @@ impl InboundRequestHandler {
                     }
                 },
                 // anemo does not currently use datagrams so we can
-                // just ignore and drop the stream
+                // just ignore them
                 datagram = self.incoming_datagrams.select_next_some() => {
                     match datagram {
                         Ok(datagram) => trace!("incoming datagram of length: {}", datagram.len()),
@@ -368,9 +442,13 @@ impl InboundRequestHandler {
             }
         }
 
-        if let Some(connection) = self.connections.write().remove(&self.peer_id) {
-            connection.close();
-        }
+        //TODO there is a bug here if we happened to have a multidial if we drop the existing
+        //connection we'd end up dropping both. Instead of using PeerId we should probably use the
+        //unique connection ID
+        self.active_peers.write().remove(
+            &self.peer_id,
+            crate::types::DisconnectReason::ConnectionLost,
+        );
 
         info!("InboundRequestHandler ended");
     }
