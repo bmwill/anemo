@@ -138,6 +138,27 @@ impl ActivePeers {
         }
     }
 
+    fn remove_with_stable_id(
+        &mut self,
+        peer_id: PeerId,
+        stable_id: usize,
+        reason: crate::types::DisconnectReason,
+    ) {
+        match self.connections.entry(peer_id) {
+            Entry::Occupied(entry) => {
+                // Only remove the entry if the stable id matches
+                if entry.get().stable_id() == stable_id {
+                    let (peer_id, connection) = entry.remove_entry();
+                    // maybe actually provide reason to other side?
+                    connection.close();
+
+                    self.send_event(crate::types::PeerEvent::LostPeer(peer_id, reason));
+                }
+            }
+            Entry::Vacant(_) => {}
+        }
+    }
+
     fn send_event(&self, event: crate::types::PeerEvent) {
         // We don't care if anyone is listening
         let _ = self.peer_event_sender.send(event);
@@ -434,11 +455,9 @@ impl InboundRequestHandler {
             }
         }
 
-        //TODO there is a bug here if we happened to have a multidial if we drop the existing
-        //connection we'd end up dropping both. Instead of using PeerId we should probably use the
-        //unique connection ID
-        self.active_peers.write().remove(
-            &self.connection.peer_id(),
+        self.active_peers.write().remove_with_stable_id(
+            self.connection.peer_id(),
+            self.connection.stable_id(),
             crate::types::DisconnectReason::ConnectionLost,
         );
 
