@@ -2,10 +2,12 @@ use crate::{
     endpoint::NewConnection,
     peer::Peer,
     wire::{read_request, write_response},
-    Connection, ConnectionOrigin, Endpoint, Incoming, PeerId, Request, Response, Result,
+    Connecting, Connection, ConnectionOrigin, Endpoint, Incoming, PeerId, Request, Response,
+    Result,
 };
 use anyhow::anyhow;
 use bytes::Bytes;
+use futures::FutureExt;
 use futures::{
     stream::{Fuse, FuturesUnordered},
     StreamExt,
@@ -293,11 +295,16 @@ enum ConnectionManagerRequest {
     ConnectRequest(SocketAddr, tokio::sync::oneshot::Sender<Result<PeerId>>),
 }
 
+struct ConnectingOutput {
+    connecting_result: Result<NewConnection>,
+    maybe_oneshot: Option<tokio::sync::oneshot::Sender<Result<PeerId>>>,
+}
+
 struct ConnectionManager {
     endpoint: Arc<Endpoint>,
 
     mailbox: Fuse<tokio_stream::wrappers::ReceiverStream<ConnectionManagerRequest>>,
-    pending_connections: FuturesUnordered<JoinHandle<Result<NewConnection>>>,
+    pending_connections: FuturesUnordered<JoinHandle<ConnectingOutput>>,
 
     active_peers: Arc<RwLock<ActivePeers>>,
     incoming: Fuse<Incoming>,
@@ -329,53 +336,21 @@ impl ConnectionManager {
     async fn start(mut self) {
         info!("ConnectionManager started");
 
-        let mut pending_dials = FuturesUnordered::new();
-
         loop {
             futures::select! {
                 request = self.mailbox.select_next_some() => {
                     info!("recieved new request");
                     match request {
                         ConnectionManagerRequest::ConnectRequest(address, oneshot) => {
-                            let connecting = self.endpoint.connect(address);
-                            pending_dials.push(async move {
-                                //TODO FIX THIS PANIC
-                                let connecting = connecting.unwrap();
-                                (connecting.await, oneshot)
-                            });
+                            self.handle_connect_request(address, oneshot);
                         }
                     }
                 }
-                maybe_dial = pending_dials.select_next_some() => {
-                    let (maybe_connection, oneshot) = maybe_dial;
-                    match maybe_connection {
-                        Ok(new_connection) => {
-                            info!("new connection complete");
-                            let peer_id = new_connection.connection.peer_id();
-                            self.add_peer(new_connection);
-                            let _ = oneshot.send(Ok(peer_id));
-                        }
-                        Err(e) => {
-                            error!("inbound connection failed: {e}");
-                            let _ = oneshot.send(Err(e));
-                        }
-                    }
-                },
                 connecting = self.incoming.select_next_some() => {
-                    info!("recieved new incoming connection");
-                    let join_handle = JoinHandle(tokio::spawn(connecting));
-                    self.pending_connections.push(join_handle);
+                    self.handle_incoming(connecting);
                 },
-                maybe_connection = self.pending_connections.select_next_some() => {
-                    match maybe_connection {
-                        Ok(new_connection) => {
-                            info!("new connection complete");
-                            self.add_peer(new_connection);
-                        }
-                        Err(e) => {
-                            error!("inbound connection failed: {e}");
-                        }
-                    }
+                connecting_output = self.pending_connections.select_next_some() => {
+                    self.handle_connecting_result(connecting_output);
                 },
                 complete => break,
             }
@@ -397,6 +372,61 @@ impl ConnectionManager {
             );
 
             tokio::spawn(request_handler.start());
+        }
+    }
+
+    fn handle_connect_request(
+        &mut self,
+        address: SocketAddr,
+        oneshot: tokio::sync::oneshot::Sender<Result<PeerId>>,
+    ) {
+        let connecting = self.endpoint.connect(address);
+        let join_handle = JoinHandle(tokio::spawn(async move {
+            let connecting_result = match connecting {
+                Ok(connecting) => connecting.await,
+                Err(e) => Err(e),
+            };
+            ConnectingOutput {
+                connecting_result,
+                maybe_oneshot: Some(oneshot),
+            }
+        }));
+        self.pending_connections.push(join_handle);
+    }
+
+    fn handle_incoming(&mut self, connecting: Connecting) {
+        info!("recieved new incoming connection");
+        let join_handle = JoinHandle(tokio::spawn(connecting.map(|connecting_result| {
+            ConnectingOutput {
+                connecting_result,
+                maybe_oneshot: None,
+            }
+        })));
+        self.pending_connections.push(join_handle);
+    }
+
+    fn handle_connecting_result(
+        &mut self,
+        ConnectingOutput {
+            connecting_result,
+            maybe_oneshot,
+        }: ConnectingOutput,
+    ) {
+        match connecting_result {
+            Ok(new_connection) => {
+                info!("new connection complete");
+                let peer_id = new_connection.connection.peer_id();
+                self.add_peer(new_connection);
+                if let Some(oneshot) = maybe_oneshot {
+                    let _ = oneshot.send(Ok(peer_id));
+                }
+            }
+            Err(e) => {
+                error!("inbound connection failed: {e}");
+                if let Some(oneshot) = maybe_oneshot {
+                    let _ = oneshot.send(Err(e));
+                }
+            }
         }
     }
 }
