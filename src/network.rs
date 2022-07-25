@@ -147,26 +147,21 @@ impl ActivePeers {
     pub fn add(
         &mut self,
         own_peer_id: &PeerId,
-        NewConnection {
-            connection,
-            uni_streams,
-            bi_streams,
-            datagrams,
-        }: NewConnection,
-    ) -> Option<(PeerId, IncomingUniStreams, IncomingBiStreams, Datagrams)> {
+        new_connection: NewConnection,
+    ) -> Option<NewConnection> {
         // TODO drop Connection if you've somehow connected out ourself
 
-        let peer_id = PeerId(connection.peer_identity());
+        let peer_id = new_connection.connection.peer_id();
         match self.connections.entry(peer_id) {
             Entry::Occupied(mut entry) => {
                 if Self::simultaneous_dial_tie_breaking(
                     own_peer_id,
                     &peer_id,
                     entry.get().origin(),
-                    connection.origin(),
+                    new_connection.connection.origin(),
                 ) {
                     info!("closing old connection with {peer_id:?} to mitigate simultaneous dial");
-                    let old_connection = entry.insert(connection);
+                    let old_connection = entry.insert(new_connection.connection.clone());
                     old_connection.close();
                     self.send_event(crate::types::PeerEvent::LostPeer(
                         peer_id,
@@ -174,19 +169,19 @@ impl ActivePeers {
                     ));
                 } else {
                     info!("closing new connection with {peer_id:?} to mitigate simultaneous dial");
-                    connection.close();
+                    new_connection.connection.close();
                     // Early return to avoid standing up Incoming Request handlers
                     return None;
                 }
             }
             Entry::Vacant(entry) => {
-                entry.insert(connection);
+                entry.insert(new_connection.connection.clone());
             }
         }
 
         self.send_event(crate::types::PeerEvent::NewPeer(peer_id));
 
-        Some((peer_id, uni_streams, bi_streams, datagrams))
+        Some(new_connection)
     }
 
     /// In the event two peers simultaneously dial each other we need to be able to do
@@ -269,18 +264,15 @@ impl NetworkInner {
     // }
 
     fn add_peer(&self, new_connection: NewConnection) {
-        if let Some((peer_id, uni_streams, bi_streams, datagrams)) = self
+        if let Some(new_connection) = self
             .active_peers
             .write()
             .add(&self.peer_id(), new_connection)
         {
             let request_handler = InboundRequestHandler::new(
-                self.active_peers.clone(),
-                peer_id,
+                new_connection,
                 self.on_bi.lock().clone(),
-                uni_streams,
-                bi_streams,
-                datagrams,
+                self.active_peers.clone(),
             );
 
             tokio::spawn(request_handler.start());
@@ -347,18 +339,15 @@ impl ConnectionManager {
     }
 
     fn add_peer(&mut self, new_connection: NewConnection) {
-        if let Some((peer_id, uni_streams, bi_streams, datagrams)) = self
+        if let Some(new_connection) = self
             .active_peers
             .write()
             .add(&self.own_peer_id, new_connection)
         {
             let request_handler = InboundRequestHandler::new(
-                self.active_peers.clone(),
-                peer_id,
+                new_connection,
                 self.service.clone(),
-                uni_streams,
-                bi_streams,
-                datagrams,
+                self.active_peers.clone(),
             );
 
             tokio::spawn(request_handler.start());
@@ -367,35 +356,38 @@ impl ConnectionManager {
 }
 
 struct InboundRequestHandler {
-    active_peers: Arc<RwLock<ActivePeers>>,
-    peer_id: PeerId,
-    service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
+    connection: Connection,
     incoming_bi: Fuse<IncomingBiStreams>,
     incoming_uni: Fuse<IncomingUniStreams>,
     incoming_datagrams: Fuse<Datagrams>,
+
+    service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
+    active_peers: Arc<RwLock<ActivePeers>>,
 }
 
 impl InboundRequestHandler {
     fn new(
-        active_peers: Arc<RwLock<ActivePeers>>,
-        peer_id: PeerId,
+        NewConnection {
+            connection,
+            uni_streams,
+            bi_streams,
+            datagrams,
+        }: NewConnection,
         service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
-        incoming_uni: IncomingUniStreams,
-        incoming_bi: IncomingBiStreams,
-        incoming_datagrams: Datagrams,
+        active_peers: Arc<RwLock<ActivePeers>>,
     ) -> Self {
         Self {
-            active_peers,
-            peer_id,
+            connection,
+            incoming_uni: uni_streams.fuse(),
+            incoming_bi: bi_streams.fuse(),
+            incoming_datagrams: datagrams.fuse(),
             service,
-            incoming_uni: incoming_uni.fuse(),
-            incoming_bi: incoming_bi.fuse(),
-            incoming_datagrams: incoming_datagrams.fuse(),
+            active_peers,
         }
     }
 
     async fn start(mut self) {
-        info!(peer =% self.peer_id, "InboundRequestHandler started");
+        info!(peer =% self.connection.peer_id(), "InboundRequestHandler started");
 
         let mut inflight_requests = FuturesUnordered::new();
 
@@ -417,7 +409,7 @@ impl InboundRequestHandler {
                         Ok((bi_tx, bi_rx)) => {
                             info!("incoming bi stream! {}", bi_tx.id());
                             let request_handler =
-                                BiStreamRequestHandler::new(self.peer_id, self.service.clone(), bi_tx, bi_rx);
+                                BiStreamRequestHandler::new(self.connection.peer_id(), self.service.clone(), bi_tx, bi_rx);
                             inflight_requests.push(request_handler.handle());
                         }
                         Err(e) => {
@@ -446,7 +438,7 @@ impl InboundRequestHandler {
         //connection we'd end up dropping both. Instead of using PeerId we should probably use the
         //unique connection ID
         self.active_peers.write().remove(
-            &self.peer_id,
+            &self.connection.peer_id(),
             crate::types::DisconnectReason::ConnectionLost,
         );
 
