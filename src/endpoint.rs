@@ -38,12 +38,16 @@ impl Endpoint {
         Ok((endpoint, incoming))
     }
 
-    pub fn connect<A: std::net::ToSocketAddrs>(&self, addr: A) -> Result<Connecting> {
+    pub fn connect_with_address<A: std::net::ToSocketAddrs>(&self, addr: A) -> Result<Connecting> {
         let addr = addr
             .to_socket_addrs()?
             .next()
             .ok_or_else(|| anyhow::anyhow!("no address to connect to"))?;
 
+        self.connect(addr)
+    }
+
+    pub fn connect(&self, addr: SocketAddr) -> Result<Connecting> {
         self.inner
             .connect(addr, self.config.server_name())
             .map_err(Into::into)

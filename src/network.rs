@@ -10,7 +10,7 @@ use futures::{
     stream::{Fuse, FuturesUnordered},
     StreamExt,
 };
-use parking_lot::{Mutex, RwLock};
+use parking_lot::RwLock;
 use quinn::{Datagrams, IncomingBiStreams, IncomingUniStreams, RecvStream, SendStream};
 use std::{
     collections::{hash_map::Entry, HashMap},
@@ -40,27 +40,23 @@ impl Network {
     pub fn start(
         endpoint: Endpoint,
         incoming: Incoming,
-        rpc_service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
+        service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
     ) -> Self {
-        let active_peers = ActivePeers::new(128);
-        let service = rpc_service.clone();
+        let endpoint = Arc::new(endpoint);
+        let active_peers = Arc::new(RwLock::new(ActivePeers::new(128)));
+
+        let (connection_manager, connection_manager_handle) =
+            ConnectionManager::new(endpoint.clone(), active_peers.clone(), incoming, service);
 
         let network = Self(Arc::new(NetworkInner {
             endpoint,
-            active_peers: Arc::new(RwLock::new(active_peers)),
-            on_bi: Mutex::new(rpc_service),
+            active_peers,
+            connection_manager_handle,
         }));
 
         info!("Starting network");
 
-        let inbound_connection_handler = ConnectionManager::new(
-            network.peer_id(),
-            network.0.active_peers.clone(),
-            incoming,
-            service,
-        );
-
-        tokio::spawn(inbound_connection_handler.start());
+        tokio::spawn(connection_manager.start());
 
         network
     }
@@ -231,10 +227,9 @@ impl ActivePeers {
 }
 
 struct NetworkInner {
-    endpoint: Endpoint,
+    endpoint: Arc<Endpoint>,
     active_peers: Arc<RwLock<ActivePeers>>,
-    //TODO these shouldn't need to be wrapped in mutexes
-    on_bi: Mutex<BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>>,
+    connection_manager_handle: tokio::sync::mpsc::Sender<ConnectionManagerRequest>,
 }
 
 impl NetworkInner {
@@ -252,10 +247,12 @@ impl NetworkInner {
     }
 
     async fn connect(&self, addr: SocketAddr) -> Result<PeerId> {
-        let new_connection = self.endpoint.connect(addr)?.await?;
-        let peer_id = PeerId(new_connection.connection.peer_identity());
-        self.add_peer(new_connection);
-        Ok(peer_id)
+        let (sender, reciever) = tokio::sync::oneshot::channel();
+        self.connection_manager_handle
+            .send(ConnectionManagerRequest::ConnectRequest(addr, sender))
+            .await
+            .expect("ConnectionManager should still be up");
+        reciever.await?
     }
 
     fn disconnect(&self, peer_id: PeerId) -> Result<()> {
@@ -283,22 +280,6 @@ impl NetworkInner {
     //         .message(message)
     //         .await
     // }
-
-    fn add_peer(&self, new_connection: NewConnection) {
-        if let Some(new_connection) = self
-            .active_peers
-            .write()
-            .add(&self.peer_id(), new_connection)
-        {
-            let request_handler = InboundRequestHandler::new(
-                new_connection,
-                self.on_bi.lock().clone(),
-                self.active_peers.clone(),
-            );
-
-            tokio::spawn(request_handler.start());
-        }
-    }
 }
 
 impl Drop for NetworkInner {
@@ -307,8 +288,16 @@ impl Drop for NetworkInner {
     }
 }
 
+#[derive(Debug)]
+enum ConnectionManagerRequest {
+    ConnectRequest(SocketAddr, tokio::sync::oneshot::Sender<Result<PeerId>>),
+}
+
 struct ConnectionManager {
-    own_peer_id: PeerId,
+    endpoint: Arc<Endpoint>,
+
+    mailbox: Fuse<tokio_stream::wrappers::ReceiverStream<ConnectionManagerRequest>>,
+
     active_peers: Arc<RwLock<ActivePeers>>,
     incoming: Fuse<Incoming>,
 
@@ -317,26 +306,60 @@ struct ConnectionManager {
 
 impl ConnectionManager {
     fn new(
-        own_peer_id: PeerId,
+        endpoint: Arc<Endpoint>,
         active_peers: Arc<RwLock<ActivePeers>>,
         incoming: Incoming,
         service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
-    ) -> Self {
-        Self {
-            own_peer_id,
-            active_peers,
-            incoming: incoming.fuse(),
-            service,
-        }
+    ) -> (Self, tokio::sync::mpsc::Sender<ConnectionManagerRequest>) {
+        let (sender, reciever) = tokio::sync::mpsc::channel(128);
+        (
+            Self {
+                endpoint,
+                mailbox: tokio_stream::wrappers::ReceiverStream::new(reciever).fuse(),
+                active_peers,
+                incoming: incoming.fuse(),
+                service,
+            },
+            sender,
+        )
     }
 
     async fn start(mut self) {
         info!("ConnectionManager started");
 
         let mut pending_connections = FuturesUnordered::new();
+        let mut pending_dials = FuturesUnordered::new();
 
         loop {
             futures::select! {
+                request = self.mailbox.select_next_some() => {
+                    info!("recieved new request");
+                    match request {
+                        ConnectionManagerRequest::ConnectRequest(address, oneshot) => {
+                            let connecting = self.endpoint.connect(address);
+                            pending_dials.push(async move {
+                                //TODO FIX THIS PANIC
+                                let connecting = connecting.unwrap();
+                                (connecting.await, oneshot)
+                            });
+                        }
+                    }
+                }
+                maybe_dial = pending_dials.select_next_some() => {
+                    let (maybe_connection, oneshot) = maybe_dial;
+                    match maybe_connection {
+                        Ok(new_connection) => {
+                            info!("new connection complete");
+                            let peer_id = new_connection.connection.peer_id();
+                            self.add_peer(new_connection);
+                            let _ = oneshot.send(Ok(peer_id));
+                        }
+                        Err(e) => {
+                            error!("inbound connection failed: {e}");
+                            let _ = oneshot.send(Err(e));
+                        }
+                    }
+                },
                 connecting = self.incoming.select_next_some() => {
                     info!("recieved new incoming connection");
                     pending_connections.push(connecting);
@@ -363,7 +386,7 @@ impl ConnectionManager {
         if let Some(new_connection) = self
             .active_peers
             .write()
-            .add(&self.own_peer_id, new_connection)
+            .add(&self.endpoint.peer_id(), new_connection)
         {
             let request_handler = InboundRequestHandler::new(
                 new_connection,
