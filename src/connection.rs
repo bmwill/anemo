@@ -1,4 +1,4 @@
-use crate::{ConnectionOrigin, Result};
+use crate::{ConnectionOrigin, PeerId, Result};
 use quinn::{ConnectionError, RecvStream, SendStream};
 use std::{fmt, net::SocketAddr, time::Duration};
 use tracing::trace;
@@ -47,6 +47,11 @@ impl Connection {
     /// Cryptographic identity of the peer
     pub fn peer_identity(&self) -> ed25519_dalek::PublicKey {
         self.peer_identity
+    }
+
+    /// PeerId of the Remote Peer
+    pub fn peer_id(&self) -> PeerId {
+        PeerId(self.peer_identity)
     }
 
     /// Origin of the Connection
