@@ -297,6 +297,7 @@ struct ConnectionManager {
     endpoint: Arc<Endpoint>,
 
     mailbox: Fuse<tokio_stream::wrappers::ReceiverStream<ConnectionManagerRequest>>,
+    pending_connections: FuturesUnordered<JoinHandle<Result<NewConnection>>>,
 
     active_peers: Arc<RwLock<ActivePeers>>,
     incoming: Fuse<Incoming>,
@@ -316,6 +317,7 @@ impl ConnectionManager {
             Self {
                 endpoint,
                 mailbox: tokio_stream::wrappers::ReceiverStream::new(reciever).fuse(),
+                pending_connections: FuturesUnordered::new(),
                 active_peers,
                 incoming: incoming.fuse(),
                 service,
@@ -327,7 +329,6 @@ impl ConnectionManager {
     async fn start(mut self) {
         info!("ConnectionManager started");
 
-        let mut pending_connections = FuturesUnordered::new();
         let mut pending_dials = FuturesUnordered::new();
 
         loop {
@@ -362,9 +363,10 @@ impl ConnectionManager {
                 },
                 connecting = self.incoming.select_next_some() => {
                     info!("recieved new incoming connection");
-                    pending_connections.push(connecting);
+                    let join_handle = JoinHandle(tokio::spawn(connecting));
+                    self.pending_connections.push(join_handle);
                 },
-                maybe_connection = pending_connections.select_next_some() => {
+                maybe_connection = self.pending_connections.select_next_some() => {
                     match maybe_connection {
                         Ok(new_connection) => {
                             info!("new connection complete");
@@ -396,6 +398,29 @@ impl ConnectionManager {
 
             tokio::spawn(request_handler.start());
         }
+    }
+}
+
+// JoinHandle that aborts on drop
+#[derive(Debug)]
+#[must_use]
+pub struct JoinHandle<T>(tokio::task::JoinHandle<T>);
+
+impl<T> Drop for JoinHandle<T> {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
+impl<T> std::future::Future for JoinHandle<T> {
+    type Output = T;
+
+    fn poll(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Self::Output> {
+        // If the task panics just propagate it up
+        std::pin::Pin::new(&mut self.0).poll(cx).map(Result::unwrap)
     }
 }
 
