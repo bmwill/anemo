@@ -1,7 +1,6 @@
 use crate::{
-    network::network_message_frame_codec,
     types::request::{IntoRequest, Message},
-    wire::{read_response, write_request},
+    wire::{network_message_frame_codec, read_response, write_request},
     Connection, PeerId, Request, Response, Result,
 };
 use bytes::Bytes;

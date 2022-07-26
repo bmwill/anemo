@@ -16,6 +16,18 @@ use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
 
 const ANEMO: &[u8; 5] = b"anemo";
 
+/// Returns a fully configured length-delimited codec for writing/reading
+/// serialized frames to/from a socket.
+pub(crate) fn network_message_frame_codec() -> LengthDelimitedCodec {
+    const MAX_FRAME_SIZE: usize = 1 << 23; // 8 MiB
+
+    LengthDelimitedCodec::builder()
+        .max_frame_length(MAX_FRAME_SIZE)
+        .length_field_length(4)
+        .big_endian()
+        .new_codec()
+}
+
 pub(crate) async fn read_version_frame<T: AsyncRead + Unpin>(
     recv_stream: &mut T,
 ) -> Result<Version> {

@@ -1,3 +1,4 @@
+use super::request_handler::InboundRequestHandler;
 use crate::{
     endpoint::NewConnection, types::PeerInfo, Connecting, Connection, ConnectionOrigin, Endpoint,
     Incoming, PeerId, Request, Response, Result,
@@ -19,6 +20,7 @@ use tracing::{error, info};
 
 const CONNECTIVITY_CHECK_INTERVAL_MS: u64 = 5_000; // 5 seconds
 const MAX_CONNECTION_BACKOFF_MS: u64 = 60_000; // 1 minute
+const _CONNECTION_BACKOFF_MS: u64 = 10_000; // 10 seconds
 
 #[derive(Debug)]
 pub enum ConnectionManagerRequest {
@@ -76,6 +78,11 @@ impl ConnectionManager {
     }
 
     //TODO add shutdown logic when some branches of the select don't return Some
+    //
+    // Note: A great deal of care is taken to ensure that all event handlers are non-asynchronous
+    // and that the only "await" points are from the select macro picking which event to handle.
+    // This ensures that the event loop is able to process events at a high speed reduce the chance
+    // for building up a backlog of events to process.
     pub async fn start(mut self) {
         info!("ConnectionManager started");
 
@@ -112,12 +119,15 @@ impl ConnectionManager {
             .active_peers
             .add(&self.endpoint.peer_id(), new_connection)
         {
-            let request_handler = super::InboundRequestHandler::new(
+            let request_handler = InboundRequestHandler::new(
                 new_connection,
                 self.service.clone(),
                 self.active_peers.clone(),
             );
 
+            // TODO think about holding onto a handle to the ConnectionHandler task so that we can
+            // cancel them and maybe even get rid of the need for the handler to hold onto the set
+            // of active peers
             tokio::spawn(request_handler.start());
         }
     }
