@@ -1,9 +1,8 @@
-use super::ActivePeers;
-use crate::{
-    endpoint::NewConnection,
+use super::{
     wire::{network_message_frame_codec, read_request, write_response},
-    Connection, PeerId, Request, Response, Result,
+    ActivePeers,
 };
+use crate::{endpoint::NewConnection, Connection, PeerId, Request, Response, Result};
 use bytes::Bytes;
 use futures::{
     stream::{Fuse, FuturesUnordered},

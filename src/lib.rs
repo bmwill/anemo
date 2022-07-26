@@ -4,11 +4,9 @@ mod crypto;
 mod endpoint;
 mod error;
 mod network;
-mod peer;
 mod routing;
 pub mod rpc;
 pub mod types;
-mod wire;
 
 pub use config::{EndpointConfig, EndpointConfigBuilder};
 pub use connection::Connection;

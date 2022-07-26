@@ -1,6 +1,6 @@
+use super::wire::{network_message_frame_codec, read_response, write_request};
 use crate::{
     types::request::{IntoRequest, Message},
-    wire::{network_message_frame_codec, read_response, write_request},
     Connection, PeerId, Request, Response, Result,
 };
 use bytes::Bytes;

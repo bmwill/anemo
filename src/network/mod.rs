@@ -1,4 +1,4 @@
-use crate::{peer::Peer, Endpoint, Incoming, PeerId, Request, Response, Result};
+use crate::{Endpoint, Incoming, PeerId, Request, Response, Result};
 use anyhow::anyhow;
 use bytes::Bytes;
 use std::{convert::Infallible, net::SocketAddr, sync::Arc};
@@ -9,7 +9,11 @@ mod connection_manager;
 pub use connection_manager::KnownPeers;
 use connection_manager::{ActivePeers, ConnectionManager, ConnectionManagerRequest};
 
+mod peer;
+pub use peer::Peer;
+
 mod request_handler;
+mod wire;
 
 #[derive(Clone)]
 pub struct Network(Arc<NetworkInner>);
