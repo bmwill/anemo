@@ -1,21 +1,24 @@
 use crate::{
-    endpoint::NewConnection, Connecting, Connection, ConnectionOrigin, Endpoint, Incoming, PeerId,
-    Request, Response, Result,
+    endpoint::NewConnection, types::PeerInfo, Connecting, Connection, ConnectionOrigin, Endpoint,
+    Incoming, PeerId, Request, Response, Result,
 };
 use bytes::Bytes;
-use futures::FutureExt;
 use futures::{
     stream::{Fuse, FuturesUnordered},
-    StreamExt,
+    FutureExt, StreamExt,
 };
 use std::{
-    collections::{hash_map::Entry, HashMap},
+    collections::{hash_map::Entry, HashMap, HashSet},
     convert::Infallible,
     net::SocketAddr,
-    sync::Arc,
+    sync::{Arc, RwLock},
+    time::Duration,
 };
 use tower::util::BoxCloneService;
 use tracing::{error, info};
+
+const CONNECTIVITY_CHECK_INTERVAL_MS: u64 = 5_000; // 5 seconds
+const MAX_CONNECTION_BACKOFF_MS: u64 = 60_000; // 1 minute
 
 #[derive(Debug)]
 pub enum ConnectionManagerRequest {
@@ -32,17 +35,25 @@ pub struct ConnectionManager {
 
     mailbox: Fuse<tokio_stream::wrappers::ReceiverStream<ConnectionManagerRequest>>,
     pending_connections: FuturesUnordered<JoinHandle<ConnectingOutput>>,
+    pending_dials: HashMap<PeerId, tokio::sync::oneshot::Receiver<Result<PeerId>>>,
 
     active_peers: ActivePeers,
+    known_peers: KnownPeers,
     incoming: Fuse<Incoming>,
 
     service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
+
+    /// Trigger connectivity checks every interval.
+    connectivity_check_interval: Duration,
+    /// Maximum delay between 2 consecutive attempts to connect with a peer.
+    _max_connection_backoff: Duration,
 }
 
 impl ConnectionManager {
     pub fn new(
         endpoint: Arc<Endpoint>,
         active_peers: ActivePeers,
+        known_peers: KnownPeers,
         incoming: Incoming,
         service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
     ) -> (Self, tokio::sync::mpsc::Sender<ConnectionManagerRequest>) {
@@ -52,19 +63,29 @@ impl ConnectionManager {
                 endpoint,
                 mailbox: tokio_stream::wrappers::ReceiverStream::new(reciever).fuse(),
                 pending_connections: FuturesUnordered::new(),
+                pending_dials: Default::default(),
                 active_peers,
+                known_peers,
                 incoming: incoming.fuse(),
                 service,
+                connectivity_check_interval: Duration::from_millis(CONNECTIVITY_CHECK_INTERVAL_MS),
+                _max_connection_backoff: Duration::from_millis(MAX_CONNECTION_BACKOFF_MS),
             },
             sender,
         )
     }
 
+    //TODO add shutdown logic when some branches of the select don't return Some
     pub async fn start(mut self) {
         info!("ConnectionManager started");
 
+        let mut interval = tokio::time::interval(self.connectivity_check_interval);
+
         loop {
             futures::select! {
+                _ = interval.tick().fuse() => {
+                    self.handle_connectivity_check();
+                }
                 request = self.mailbox.select_next_some() => {
                     info!("recieved new request");
                     match request {
@@ -106,18 +127,7 @@ impl ConnectionManager {
         address: SocketAddr,
         oneshot: tokio::sync::oneshot::Sender<Result<PeerId>>,
     ) {
-        let connecting = self.endpoint.connect(address);
-        let join_handle = JoinHandle(tokio::spawn(async move {
-            let connecting_result = match connecting {
-                Ok(connecting) => connecting.await,
-                Err(e) => Err(e),
-            };
-            ConnectingOutput {
-                connecting_result,
-                maybe_oneshot: Some(oneshot),
-            }
-        }));
-        self.pending_connections.push(join_handle);
+        self.dial_peer(address, oneshot);
     }
 
     fn handle_incoming(&mut self, connecting: Connecting) {
@@ -155,6 +165,67 @@ impl ConnectionManager {
             }
         }
     }
+
+    //TODO don't always dial the first address
+    //TODO handle backoffs
+    fn handle_connectivity_check(&mut self) {
+        // Drain any completed dials by checking if the oneshot channel has been filled or not
+        self.pending_dials
+            .retain(|_, oneshot| match oneshot.try_recv() {
+                Ok(_) | Err(tokio::sync::oneshot::error::TryRecvError::Closed) => false,
+                Err(tokio::sync::oneshot::error::TryRecvError::Empty) => true,
+            });
+
+        let active_peers = self
+            .active_peers
+            .peers()
+            .into_iter()
+            .collect::<HashSet<PeerId>>();
+        let known_peers = self.known_peers.get_all();
+
+        let eligible = known_peers
+            .into_iter()
+            .filter(|peer_info| {
+                !peer_info.address.is_empty() // The peer has an address we can dial
+                && !active_peers.contains(&peer_info.peer_id) // The node is not already connected.
+                && !self.pending_dials.contains_key(&peer_info.peer_id) // There is no pending dial to this node.
+            })
+            .collect::<Vec<_>>();
+
+        // Limit the number of outstanding connections attempting to be established
+        let number_to_dial = std::cmp::min(
+            eligible.len(),
+            // TODO make this configurable
+            100_usize.saturating_sub(self.pending_connections.len()),
+        );
+
+        for mut peer in eligible.into_iter().take(number_to_dial) {
+            let (sender, reciever) = tokio::sync::oneshot::channel();
+
+            let address = peer.address.remove(0);
+            self.dial_peer(address, sender);
+            self.pending_dials.insert(peer.peer_id, reciever);
+        }
+    }
+
+    fn dial_peer(
+        &mut self,
+        address: SocketAddr,
+        oneshot: tokio::sync::oneshot::Sender<Result<PeerId>>,
+    ) {
+        let connecting = self.endpoint.connect(address);
+        let join_handle = JoinHandle(tokio::spawn(async move {
+            let connecting_result = match connecting {
+                Ok(connecting) => connecting.await,
+                Err(e) => Err(e),
+            };
+            ConnectingOutput {
+                connecting_result,
+                maybe_oneshot: Some(oneshot),
+            }
+        }));
+        self.pending_connections.push(join_handle);
+    }
 }
 
 // JoinHandle that aborts on drop
@@ -181,13 +252,11 @@ impl<T> std::future::Future for JoinHandle<T> {
 }
 
 #[derive(Debug, Clone)]
-pub struct ActivePeers(Arc<std::sync::RwLock<ActivePeersInner>>);
+pub struct ActivePeers(Arc<RwLock<ActivePeersInner>>);
 
 impl ActivePeers {
     pub fn new(channel_size: usize) -> Self {
-        Self(Arc::new(std::sync::RwLock::new(ActivePeersInner::new(
-            channel_size,
-        ))))
+        Self(Arc::new(RwLock::new(ActivePeersInner::new(channel_size))))
     }
 
     #[allow(unused)]
@@ -363,5 +432,34 @@ impl ActivePeersInner {
             (ConnectionOrigin::Inbound, ConnectionOrigin::Outbound) => remote_peer_id < own_peer_id,
             (ConnectionOrigin::Outbound, ConnectionOrigin::Inbound) => own_peer_id < remote_peer_id,
         }
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct KnownPeers(Arc<RwLock<HashMap<PeerId, PeerInfo>>>);
+
+impl KnownPeers {
+    pub fn new() -> Self {
+        Default::default()
+    }
+
+    pub fn remove(&self, peer_id: &PeerId) -> Option<PeerInfo> {
+        self.0.write().unwrap().remove(peer_id)
+    }
+
+    pub fn remove_all(&self) -> impl Iterator<Item = PeerInfo> {
+        std::mem::take(&mut *self.0.write().unwrap()).into_values()
+    }
+
+    pub fn get(&self, peer_id: &PeerId) -> Option<PeerInfo> {
+        self.0.read().unwrap().get(peer_id).cloned()
+    }
+
+    pub fn get_all(&self) -> Vec<PeerInfo> {
+        self.0.read().unwrap().values().cloned().collect()
+    }
+
+    pub fn insert(&self, peer_info: PeerInfo) -> Option<PeerInfo> {
+        self.0.write().unwrap().insert(peer_info.peer_id, peer_info)
     }
 }

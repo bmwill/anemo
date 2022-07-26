@@ -36,6 +36,20 @@ pub mod header {
     pub const STATUS_MESSAGE: &str = "status-message";
 }
 
+#[derive(Clone, Copy, Debug)]
+pub enum PeerAffinity {
+    /// Always attempt to maintain a connection with this Peer
+    High,
+    // None,
+}
+
+#[derive(Clone, Debug)]
+pub struct PeerInfo {
+    pub peer_id: PeerId,
+    pub affinity: PeerAffinity,
+    pub address: Vec<std::net::SocketAddr>,
+}
+
 #[derive(Debug, Clone)]
 pub enum PeerEvent {
     NewPeer(PeerId),

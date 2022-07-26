@@ -17,6 +17,7 @@ use tower::{util::BoxCloneService, ServiceExt};
 use tracing::{info, trace, warn};
 
 mod connection_manager;
+pub use connection_manager::KnownPeers;
 use connection_manager::{ActivePeers, ConnectionManager, ConnectionManagerRequest};
 
 #[derive(Clone)]
@@ -41,13 +42,20 @@ impl Network {
     ) -> Self {
         let endpoint = Arc::new(endpoint);
         let active_peers = ActivePeers::new(128);
+        let known_peers = KnownPeers::new();
 
-        let (connection_manager, connection_manager_handle) =
-            ConnectionManager::new(endpoint.clone(), active_peers.clone(), incoming, service);
+        let (connection_manager, connection_manager_handle) = ConnectionManager::new(
+            endpoint.clone(),
+            active_peers.clone(),
+            known_peers.clone(),
+            incoming,
+            service,
+        );
 
         let network = Self(Arc::new(NetworkInner {
             endpoint,
             active_peers,
+            known_peers,
             connection_manager_handle,
         }));
 
@@ -64,6 +72,10 @@ impl Network {
 
     pub fn peer(&self, peer_id: PeerId) -> Option<Peer> {
         self.0.peer(peer_id)
+    }
+
+    pub fn known_peers(&self) -> &KnownPeers {
+        self.0.known_peers()
     }
 
     pub async fn connect(&self, addr: SocketAddr) -> Result<PeerId> {
@@ -91,12 +103,17 @@ impl Network {
 struct NetworkInner {
     endpoint: Arc<Endpoint>,
     active_peers: ActivePeers,
+    known_peers: KnownPeers,
     connection_manager_handle: tokio::sync::mpsc::Sender<ConnectionManagerRequest>,
 }
 
 impl NetworkInner {
     fn peers(&self) -> Vec<PeerId> {
         self.active_peers.peers()
+    }
+
+    fn known_peers(&self) -> &KnownPeers {
+        &self.known_peers
     }
 
     /// Returns the socket address that this Network is listening on
