@@ -504,4 +504,45 @@ mod test {
 
         Ok(())
     }
+
+    #[tokio::test]
+    async fn basic_connectivity_check() -> Result<()> {
+        use crate::types::DisconnectReason;
+        use crate::types::PeerEvent::*;
+
+        let _gaurd = crate::init_tracing_for_testing();
+
+        let network_1 = build_network()?;
+        let network_2 = build_network()?;
+
+        let peer_id_1 = network_1.peer_id();
+        let peer_id_2 = network_2.peer_id();
+
+        let peer_info_2 = crate::types::PeerInfo {
+            peer_id: peer_id_2,
+            affinity: crate::types::PeerAffinity::High,
+            address: vec![network_2.local_addr()],
+        };
+        let mut subscriber_1 = network_1.0.active_peers.subscribe().0;
+        let mut subscriber_2 = network_2.0.active_peers.subscribe().0;
+
+        network_1.known_peers().insert(peer_info_2);
+
+        assert_eq!(NewPeer(peer_id_2), subscriber_1.recv().await?);
+        assert_eq!(NewPeer(peer_id_1), subscriber_2.recv().await?);
+
+        network_1.known_peers().remove(&peer_id_2).unwrap();
+        network_1.disconnect(peer_id_2)?;
+
+        assert_eq!(
+            LostPeer(peer_id_2, DisconnectReason::Requested),
+            subscriber_1.recv().await?
+        );
+        assert_eq!(
+            LostPeer(peer_id_1, DisconnectReason::ConnectionLost),
+            subscriber_2.recv().await?
+        );
+
+        Ok(())
+    }
 }

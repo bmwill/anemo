@@ -50,13 +50,13 @@ pub struct PeerInfo {
     pub address: Vec<std::net::SocketAddr>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PeerEvent {
     NewPeer(PeerId),
     LostPeer(PeerId, DisconnectReason),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DisconnectReason {
     Requested,
     ConnectionLost,
