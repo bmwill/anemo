@@ -8,7 +8,6 @@ use futures::{
     stream::{Fuse, FuturesUnordered},
     StreamExt,
 };
-use parking_lot::RwLock;
 use std::{
     collections::{hash_map::Entry, HashMap},
     convert::Infallible,
@@ -34,7 +33,7 @@ pub struct ConnectionManager {
     mailbox: Fuse<tokio_stream::wrappers::ReceiverStream<ConnectionManagerRequest>>,
     pending_connections: FuturesUnordered<JoinHandle<ConnectingOutput>>,
 
-    active_peers: Arc<RwLock<ActivePeers>>,
+    active_peers: ActivePeers,
     incoming: Fuse<Incoming>,
 
     service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
@@ -43,7 +42,7 @@ pub struct ConnectionManager {
 impl ConnectionManager {
     pub fn new(
         endpoint: Arc<Endpoint>,
-        active_peers: Arc<RwLock<ActivePeers>>,
+        active_peers: ActivePeers,
         incoming: Incoming,
         service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
     ) -> (Self, tokio::sync::mpsc::Sender<ConnectionManagerRequest>) {
@@ -90,7 +89,6 @@ impl ConnectionManager {
     fn add_peer(&mut self, new_connection: NewConnection) {
         if let Some(new_connection) = self
             .active_peers
-            .write()
             .add(&self.endpoint.peer_id(), new_connection)
         {
             let request_handler = super::InboundRequestHandler::new(
@@ -182,13 +180,64 @@ impl<T> std::future::Future for JoinHandle<T> {
     }
 }
 
-pub struct ActivePeers {
+#[derive(Debug, Clone)]
+pub struct ActivePeers(Arc<std::sync::RwLock<ActivePeersInner>>);
+
+impl ActivePeers {
+    pub fn new(channel_size: usize) -> Self {
+        Self(Arc::new(std::sync::RwLock::new(ActivePeersInner::new(
+            channel_size,
+        ))))
+    }
+
+    #[allow(unused)]
+    pub fn subscribe(
+        &self,
+    ) -> (
+        tokio::sync::broadcast::Receiver<crate::types::PeerEvent>,
+        Vec<PeerId>,
+    ) {
+        self.0.read().unwrap().subscribe()
+    }
+
+    pub fn peers(&self) -> Vec<PeerId> {
+        self.0.read().unwrap().peers()
+    }
+
+    pub fn get(&self, peer_id: &PeerId) -> Option<Connection> {
+        self.0.read().unwrap().get(peer_id)
+    }
+
+    pub fn remove(&self, peer_id: &PeerId, reason: crate::types::DisconnectReason) {
+        self.0.write().unwrap().remove(peer_id, reason)
+    }
+
+    pub fn remove_with_stable_id(
+        &self,
+        peer_id: PeerId,
+        stable_id: usize,
+        reason: crate::types::DisconnectReason,
+    ) {
+        self.0
+            .write()
+            .unwrap()
+            .remove_with_stable_id(peer_id, stable_id, reason)
+    }
+
+    #[must_use]
+    fn add(&self, own_peer_id: &PeerId, new_connection: NewConnection) -> Option<NewConnection> {
+        self.0.write().unwrap().add(own_peer_id, new_connection)
+    }
+}
+
+#[derive(Debug)]
+pub struct ActivePeersInner {
     connections: HashMap<PeerId, Connection>,
     peer_event_sender: tokio::sync::broadcast::Sender<crate::types::PeerEvent>,
 }
 
-impl ActivePeers {
-    pub fn new(channel_size: usize) -> Self {
+impl ActivePeersInner {
+    fn new(channel_size: usize) -> Self {
         let (sender, _reciever) = tokio::sync::broadcast::channel(channel_size);
         Self {
             connections: Default::default(),
@@ -197,7 +246,7 @@ impl ActivePeers {
     }
 
     #[allow(unused)]
-    pub fn subscribe(
+    fn subscribe(
         &self,
     ) -> (
         tokio::sync::broadcast::Receiver<crate::types::PeerEvent>,
@@ -208,15 +257,15 @@ impl ActivePeers {
         (reciever, peers)
     }
 
-    pub fn peers(&self) -> Vec<PeerId> {
+    fn peers(&self) -> Vec<PeerId> {
         self.connections.keys().copied().collect()
     }
 
-    pub fn get(&self, peer_id: &PeerId) -> Option<Connection> {
+    fn get(&self, peer_id: &PeerId) -> Option<Connection> {
         self.connections.get(peer_id).cloned()
     }
 
-    pub fn remove(&mut self, peer_id: &PeerId, reason: crate::types::DisconnectReason) {
+    fn remove(&mut self, peer_id: &PeerId, reason: crate::types::DisconnectReason) {
         if let Some(connection) = self.connections.remove(peer_id) {
             // maybe actually provide reason to other side?
             connection.close();
@@ -225,7 +274,7 @@ impl ActivePeers {
         }
     }
 
-    pub fn remove_with_stable_id(
+    fn remove_with_stable_id(
         &mut self,
         peer_id: PeerId,
         stable_id: usize,
@@ -252,7 +301,7 @@ impl ActivePeers {
     }
 
     #[must_use]
-    pub fn add(
+    fn add(
         &mut self,
         own_peer_id: &PeerId,
         new_connection: NewConnection,

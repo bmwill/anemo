@@ -10,7 +10,6 @@ use futures::{
     stream::{Fuse, FuturesUnordered},
     StreamExt,
 };
-use parking_lot::RwLock;
 use quinn::{Datagrams, IncomingBiStreams, IncomingUniStreams, RecvStream, SendStream};
 use std::{convert::Infallible, net::SocketAddr, sync::Arc};
 use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
@@ -41,7 +40,7 @@ impl Network {
         service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
     ) -> Self {
         let endpoint = Arc::new(endpoint);
-        let active_peers = Arc::new(RwLock::new(ActivePeers::new(128)));
+        let active_peers = ActivePeers::new(128);
 
         let (connection_manager, connection_manager_handle) =
             ConnectionManager::new(endpoint.clone(), active_peers.clone(), incoming, service);
@@ -91,13 +90,13 @@ impl Network {
 
 struct NetworkInner {
     endpoint: Arc<Endpoint>,
-    active_peers: Arc<RwLock<ActivePeers>>,
+    active_peers: ActivePeers,
     connection_manager_handle: tokio::sync::mpsc::Sender<ConnectionManagerRequest>,
 }
 
 impl NetworkInner {
     fn peers(&self) -> Vec<PeerId> {
-        self.active_peers.read().peers()
+        self.active_peers.peers()
     }
 
     /// Returns the socket address that this Network is listening on
@@ -120,13 +119,12 @@ impl NetworkInner {
 
     fn disconnect(&self, peer_id: PeerId) -> Result<()> {
         self.active_peers
-            .write()
             .remove(&peer_id, crate::types::DisconnectReason::Requested);
         Ok(())
     }
 
     pub fn peer(&self, peer_id: PeerId) -> Option<Peer> {
-        let connection = self.active_peers.read().get(&peer_id)?;
+        let connection = self.active_peers.get(&peer_id)?;
         Some(Peer::new(connection))
     }
 
@@ -158,7 +156,7 @@ struct InboundRequestHandler {
     incoming_datagrams: Fuse<Datagrams>,
 
     service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
-    active_peers: Arc<RwLock<ActivePeers>>,
+    active_peers: ActivePeers,
 }
 
 impl InboundRequestHandler {
@@ -170,7 +168,7 @@ impl InboundRequestHandler {
             datagrams,
         }: NewConnection,
         service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
-        active_peers: Arc<RwLock<ActivePeers>>,
+        active_peers: ActivePeers,
     ) -> Self {
         Self {
             connection,
@@ -230,7 +228,7 @@ impl InboundRequestHandler {
             }
         }
 
-        self.active_peers.write().remove_with_stable_id(
+        self.active_peers.remove_with_stable_id(
             self.connection.peer_id(),
             self.connection.stable_id(),
             crate::types::DisconnectReason::ConnectionLost,
