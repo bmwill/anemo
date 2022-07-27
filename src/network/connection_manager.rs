@@ -44,6 +44,12 @@ pub struct ConnectionManager {
     service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
 }
 
+impl Drop for ConnectionManager {
+    fn drop(&mut self) {
+        self.endpoint.close()
+    }
+}
+
 impl ConnectionManager {
     pub fn new(
         config: Arc<Config>,
@@ -71,8 +77,6 @@ impl ConnectionManager {
         )
     }
 
-    //TODO add shutdown logic when some branches of the select don't return Some
-    //
     // Note: A great deal of care is taken to ensure that all event handlers are non-asynchronous
     // and that the only "await" points are from the select macro picking which event to handle.
     // This ensures that the event loop is able to process events at a high speed reduce the chance
@@ -87,7 +91,16 @@ impl ConnectionManager {
                 _ = interval.tick().fuse() => {
                     self.handle_connectivity_check();
                 }
-                request = self.mailbox.select_next_some() => {
+                maybe_request = self.mailbox.next() => {
+                    // Once all handles to the ConnectionManager's mailbox have been dropped this
+                    // will yeild `None` and we can break out of the event loop and terminate the
+                    // network
+                    let request = if let Some(request) = maybe_request {
+                        request
+                    } else {
+                        break;
+                    };
+
                     info!("recieved new request");
                     match request {
                         ConnectionManagerRequest::ConnectRequest(address, oneshot) => {

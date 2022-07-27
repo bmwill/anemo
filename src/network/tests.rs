@@ -125,7 +125,7 @@ async fn dropped_connection() -> Result<()> {
 
     let peer = network_1.peer(peer).unwrap();
 
-    network_2.0.endpoint.close();
+    drop(network_2);
 
     peer.rpc(Request::new(msg.as_ref().into()))
         .await

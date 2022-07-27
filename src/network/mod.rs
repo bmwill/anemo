@@ -225,9 +225,3 @@ impl NetworkInner {
     //         .await
     // }
 }
-
-impl Drop for NetworkInner {
-    fn drop(&mut self) {
-        self.endpoint.close()
-    }
-}
