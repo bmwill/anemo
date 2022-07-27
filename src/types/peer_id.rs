@@ -1,6 +1,12 @@
 #[derive(Copy, Clone, Eq)]
 pub struct PeerId(pub ed25519_dalek::PublicKey);
 
+impl PeerId {
+    pub fn short_display(&self, len: u8) -> impl std::fmt::Display + '_ {
+        ShortPeerId(self, len)
+    }
+}
+
 impl std::hash::Hash for PeerId {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.0.as_bytes().hash(state);
@@ -27,7 +33,8 @@ impl std::cmp::Ord for PeerId {
 
 impl std::fmt::Display for PeerId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for byte in self.0.as_bytes() {
+        let len = f.precision().unwrap_or(ed25519_dalek::PUBLIC_KEY_LENGTH);
+        for byte in self.0.as_bytes().iter().take(len) {
             write!(f, "{:02x}", byte)?;
         }
         Ok(())
@@ -37,6 +44,14 @@ impl std::fmt::Display for PeerId {
 impl std::fmt::Debug for PeerId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "PeerId({})", self)
+    }
+}
+
+struct ShortPeerId<'a>(&'a PeerId, u8);
+
+impl<'a> std::fmt::Display for ShortPeerId<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:.len$}", self.0, len = self.1.into())
     }
 }
 
@@ -78,6 +93,7 @@ impl std::fmt::Display for ConnectionOrigin {
 #[cfg(test)]
 mod test {
     use super::ConnectionOrigin;
+    use super::PeerId;
 
     #[test]
     fn connection_origin_debug() {
@@ -95,5 +111,18 @@ mod test {
 
         assert_eq!(inbound, "inbound");
         assert_eq!(outbound, "outbound");
+    }
+
+    #[test]
+    fn short_peer_id() {
+        let mut rng = rand::thread_rng();
+        let keypair = ed25519_dalek::Keypair::generate(&mut rng);
+        let peer_id = PeerId(keypair.public);
+
+        let num_bytes_to_display = 4;
+        let num_hex_digits = 2 * num_bytes_to_display;
+
+        let short_str = peer_id.short_display(num_bytes_to_display).to_string();
+        assert_eq!(short_str.len(), num_hex_digits.into());
     }
 }
