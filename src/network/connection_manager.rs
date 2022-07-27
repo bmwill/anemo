@@ -16,7 +16,7 @@ use std::{
     sync::{Arc, RwLock},
 };
 use tower::util::BoxCloneService;
-use tracing::{error, info};
+use tracing::{error, info, instrument};
 
 #[derive(Debug)]
 pub enum ConnectionManagerRequest {
@@ -81,6 +81,11 @@ impl ConnectionManager {
     // and that the only "await" points are from the select macro picking which event to handle.
     // This ensures that the event loop is able to process events at a high speed reduce the chance
     // for building up a backlog of events to process.
+    #[instrument(
+        name = "connection-manager",
+        skip(self),
+        fields(peer = %self.endpoint.peer_id().short_display(4))
+    )]
     pub async fn start(mut self) {
         info!("ConnectionManager started");
 

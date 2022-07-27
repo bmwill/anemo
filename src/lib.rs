@@ -25,7 +25,10 @@ pub fn init_tracing_for_testing() -> ::tracing::dispatcher::DefaultGuard {
         .with_file(true)
         .with_line_number(true)
         .with_target(false)
-        // .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
+        // .with_span_events(
+        //     tracing_subscriber::fmt::format::FmtSpan::NEW
+        //         | tracing_subscriber::fmt::format::FmtSpan::CLOSE,
+        // )
         .with_test_writer()
         .finish();
     ::tracing::subscriber::set_default(subscriber)
