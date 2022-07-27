@@ -180,7 +180,7 @@ impl ConnectionManager {
                 }
             }
             Err(e) => {
-                error!("inbound connection failed: {e}");
+                error!("connecting failed: {e}");
                 if let Some(oneshot) = maybe_oneshot {
                     let _ = oneshot.send(Err(e));
                 }

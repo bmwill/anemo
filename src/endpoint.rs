@@ -1,5 +1,5 @@
 use crate::{config::EndpointConfig, connection::Connection, ConnectionOrigin, PeerId, Result};
-use futures::{FutureExt, StreamExt};
+use futures::StreamExt;
 use quinn::{Datagrams, IncomingBiStreams, IncomingUniStreams};
 use std::{
     future::Future,
@@ -127,23 +127,26 @@ impl Future for Connecting {
     type Output = Result<NewConnection>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
-        self.inner.poll_unpin(cx).map(|result| {
-            result.map_err(Into::into).and_then(
-                |quinn::NewConnection {
-                     connection,
-                     uni_streams,
-                     bi_streams,
-                     datagrams,
-                     ..
-                 }| {
-                    Ok(NewConnection {
-                        connection: Connection::new(connection, self.origin)?,
-                        uni_streams,
-                        bi_streams,
-                        datagrams,
-                    })
-                },
-            )
+        Pin::new(&mut self.inner).poll(cx).map(|result| {
+            result
+                .map_err(anyhow::Error::from)
+                .and_then(
+                    |quinn::NewConnection {
+                         connection,
+                         uni_streams,
+                         bi_streams,
+                         datagrams,
+                         ..
+                     }| {
+                        Ok(NewConnection {
+                            connection: Connection::new(connection, self.origin)?,
+                            uni_streams,
+                            bi_streams,
+                            datagrams,
+                        })
+                    },
+                )
+                .map_err(|e| anyhow::anyhow!("failed establishing {} connection: {e}", self.origin))
         })
     }
 }
