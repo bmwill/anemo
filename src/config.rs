@@ -150,7 +150,7 @@ pub struct EndpointConfigBuilder {
     /// extension to describe, e.g., the valid DNS name.
     pub server_name: Option<String>,
 
-    pub config: Option<Config>,
+    pub transport_config: Option<quinn::TransportConfig>,
 }
 
 impl EndpointConfigBuilder {
@@ -163,8 +163,8 @@ impl EndpointConfigBuilder {
         self
     }
 
-    pub fn config(mut self, config: Config) -> Self {
-        self.config = Some(config);
+    pub fn transport_config(mut self, transport_config: quinn::TransportConfig) -> Self {
+        self.transport_config = Some(transport_config);
         self
     }
 
@@ -185,12 +185,11 @@ impl EndpointConfigBuilder {
     pub fn build(self) -> Result<EndpointConfig> {
         let keypair = self.keypair.unwrap();
         let server_name = self.server_name.unwrap();
-        let config = self.config.unwrap_or_default();
+        let transport_config = Arc::new(self.transport_config.unwrap_or_default());
 
         let cert_verifier = Arc::new(CertVerifier(server_name.clone()));
         let (certificate, pkcs8_der) = Self::generate_cert(&keypair, &server_name);
 
-        let transport_config = Arc::new(config.transport_config());
         let server_config = Self::server_config(
             certificate.clone(),
             pkcs8_der.clone(),

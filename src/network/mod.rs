@@ -57,13 +57,52 @@ impl Builder {
         let keypair = self.keypair.unwrap();
 
         let endpoint_config = EndpointConfig::builder()
-            .config(config.clone())
+            .transport_config(config.transport_config())
             .server_name(server_name)
             .keypair(keypair)
             .build()?;
         let (endpoint, incoming) = Endpoint::new_with_socket(endpoint_config, self.socket)?;
 
-        Ok(Network::start(endpoint, incoming, service))
+        Ok(Self::network_start(endpoint, incoming, service, config))
+    }
+
+    /// Start a network and return a handle to it
+    ///
+    /// Requires that this is called from within the context of a tokio runtime
+    fn network_start(
+        endpoint: Endpoint,
+        incoming: Incoming,
+        service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
+        config: Config,
+    ) -> Network {
+        let config = Arc::new(config);
+
+        let endpoint = Arc::new(endpoint);
+        let active_peers = ActivePeers::new(config.peer_event_broadcast_channel_capacity());
+        let known_peers = KnownPeers::new();
+
+        let (connection_manager, connection_manager_handle) = ConnectionManager::new(
+            config.clone(),
+            endpoint.clone(),
+            active_peers.clone(),
+            known_peers.clone(),
+            incoming,
+            service,
+        );
+
+        let network = Network(Arc::new(NetworkInner {
+            _config: config,
+            endpoint,
+            active_peers,
+            known_peers,
+            connection_manager_handle,
+        }));
+
+        info!("Starting network");
+
+        tokio::spawn(connection_manager.start());
+
+        network
     }
 }
 
@@ -87,44 +126,6 @@ impl Network {
             server_name: None,
             keypair: None,
         })
-    }
-
-    /// Start a network and return a handle to it
-    ///
-    /// Requires that this is called from within the context of a tokio runtime
-    pub fn start(
-        endpoint: Endpoint,
-        incoming: Incoming,
-        service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
-    ) -> Self {
-        let config = Arc::new(Config::default());
-
-        let endpoint = Arc::new(endpoint);
-        let active_peers = ActivePeers::new(config.peer_event_broadcast_channel_capacity());
-        let known_peers = KnownPeers::new();
-
-        let (connection_manager, connection_manager_handle) = ConnectionManager::new(
-            config.clone(),
-            endpoint.clone(),
-            active_peers.clone(),
-            known_peers.clone(),
-            incoming,
-            service,
-        );
-
-        let network = Self(Arc::new(NetworkInner {
-            _config: config,
-            endpoint,
-            active_peers,
-            known_peers,
-            connection_manager_handle,
-        }));
-
-        info!("Starting network");
-
-        tokio::spawn(connection_manager.start());
-
-        network
     }
 
     pub fn peers(&self) -> Vec<PeerId> {
