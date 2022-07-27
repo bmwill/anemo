@@ -1,7 +1,8 @@
 use super::wire::{network_message_frame_codec, read_response, write_request};
 use crate::{
+    connection::Connection,
     types::request::{IntoRequest, Message},
-    Connection, PeerId, Request, Response, Result,
+    PeerId, Request, Response, Result,
 };
 use bytes::Bytes;
 use futures::future::BoxFuture;

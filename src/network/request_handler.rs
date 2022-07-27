@@ -2,7 +2,7 @@ use super::{
     wire::{network_message_frame_codec, read_request, write_response},
     ActivePeers,
 };
-use crate::{endpoint::NewConnection, Connection, PeerId, Request, Response, Result};
+use crate::{connection::Connection, endpoint::NewConnection, PeerId, Request, Response, Result};
 use bytes::Bytes;
 use futures::{
     stream::{Fuse, FuturesUnordered},

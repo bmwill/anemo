@@ -8,9 +8,7 @@ mod routing;
 pub mod rpc;
 pub mod types;
 
-pub use config::{EndpointConfig, EndpointConfigBuilder};
-pub use connection::Connection;
-pub use endpoint::{Connecting, Endpoint, Incoming};
+pub use config::{Config, QuicConfig};
 pub use error::{Error, Result};
 pub use network::Network;
 pub use routing::Router;

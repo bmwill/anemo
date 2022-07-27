@@ -1,6 +1,6 @@
-use crate::{
-    config::Config, Endpoint, EndpointConfig, Incoming, PeerId, Request, Response, Result,
-};
+use crate::config::EndpointConfig;
+use crate::endpoint::{Endpoint, Incoming};
+use crate::{Config, PeerId, Request, Response, Result};
 use anyhow::anyhow;
 use bytes::Bytes;
 use std::{convert::Infallible, net::SocketAddr, sync::Arc};
@@ -64,7 +64,7 @@ impl Builder {
             .server_name(server_name)
             .keypair(keypair)
             .build()?;
-        let (endpoint, incoming) = Endpoint::new_with_socket(endpoint_config, self.socket)?;
+        let (endpoint, incoming) = Endpoint::new(endpoint_config, self.socket)?;
 
         Ok(Self::network_start(endpoint, incoming, service, config))
     }

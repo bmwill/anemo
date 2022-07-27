@@ -60,6 +60,7 @@ impl Connection {
     }
 
     /// Time the Connection was established
+    #[allow(unused)]
     pub fn time_established(&self) -> std::time::Instant {
         self.time_established
     }
@@ -73,6 +74,7 @@ impl Connection {
     }
 
     /// Current best estimate of this connection's latency (round-trip-time)
+    #[allow(unused)]
     pub fn rtt(&self) -> Duration {
         self.inner.rtt()
     }
