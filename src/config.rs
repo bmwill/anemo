@@ -1,9 +1,143 @@
 use crate::{crypto::CertVerifier, Result};
 use pkcs8::EncodePrivateKey;
 // use ed25519::pkcs8::EncodePrivateKey;
-use quinn::IdleTimeout;
+use quinn::VarInt;
 use rcgen::{CertificateParams, KeyPair, SignatureAlgorithm};
+use serde::Deserialize;
+use serde::Serialize;
 use std::{sync::Arc, time::Duration};
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct Config {
+    pub quic: Option<QuicConfig>,
+
+    //
+    // ConnectionManager Configs
+    //
+    pub connection_manager_channel_capacity: Option<usize>,
+
+    /// Trigger connectivity checks every interval.
+    pub connectivity_check_interval_ms: Option<u64>,
+
+    /// Maximum delay between 2 consecutive attempts to connect with a peer.
+    pub max_connection_backoff_ms: Option<u64>,
+    pub connection_backoff_ms: Option<u64>,
+    pub max_concurrent_outstanding_connecting_connections: Option<usize>,
+    pub peer_event_broadcast_channel_capacity: Option<usize>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct QuicConfig {
+    pub max_concurrent_bidi_streams: Option<u64>,
+    pub max_concurrent_uni_streams: Option<u64>,
+
+    /// How long to wait to hear from a peer before timing out a connection.
+    ///
+    /// In the absence of any keep-alive messages, connections will be closed if they remain idle
+    /// for at least this duration.
+    ///
+    /// If unspecified, this will default to 10,000 milliseconds.
+    ///
+    /// Maximum possible value is 2^62 milliseconds.
+    pub max_idle_timeout_ms: Option<u64>,
+
+    /// Interval at which to send keep-alives to maintain otherwise idle connections.
+    ///
+    /// Keep-alives prevent otherwise idle connections from timing out.
+    ///
+    /// If unspecified, this will default to `None`, disabling keep-alives.
+    pub keep_alive_interval_ms: Option<u64>,
+}
+
+impl Config {
+    pub(crate) fn transport_config(&self) -> quinn::TransportConfig {
+        self.quic
+            .as_ref()
+            .map(QuicConfig::transport_config)
+            .unwrap_or_default()
+    }
+
+    pub(crate) fn connection_manager_channel_capacity(&self) -> usize {
+        const CONNECTION_MANAGER_CHANNEL_CAPACITY: usize = 128;
+
+        self.connection_manager_channel_capacity
+            .unwrap_or(CONNECTION_MANAGER_CHANNEL_CAPACITY)
+    }
+
+    pub(crate) fn connectivity_check_interval(&self) -> Duration {
+        const CONNECTIVITY_CHECK_INTERVAL_MS: u64 = 5_000; // 5 seconds
+
+        Duration::from_millis(
+            self.connectivity_check_interval_ms
+                .unwrap_or(CONNECTIVITY_CHECK_INTERVAL_MS),
+        )
+    }
+
+    #[allow(unused)]
+    pub(crate) fn max_connection_backoff(&self) -> Duration {
+        const MAX_CONNECTION_BACKOFF_MS: u64 = 60_000; // 1 minute
+
+        Duration::from_millis(
+            self.max_connection_backoff_ms
+                .unwrap_or(MAX_CONNECTION_BACKOFF_MS),
+        )
+    }
+
+    #[allow(unused)]
+    pub(crate) fn connection_backoff_ms(&self) -> Duration {
+        const CONNECTION_BACKOFF_MS: u64 = 10_000; // 10 seconds
+
+        Duration::from_millis(self.connection_backoff_ms.unwrap_or(CONNECTION_BACKOFF_MS))
+    }
+
+    pub(crate) fn max_concurrent_outstanding_connecting_connections(&self) -> usize {
+        const MAX_CONCURRENT_OUTSTANDING_CONNECTING_CONNECTIONS: usize = 100;
+
+        self.max_concurrent_outstanding_connecting_connections
+            .unwrap_or(MAX_CONCURRENT_OUTSTANDING_CONNECTING_CONNECTIONS)
+    }
+
+    pub(crate) fn peer_event_broadcast_channel_capacity(&self) -> usize {
+        const PEER_EVENT_BROADCAST_CHANNEL_CAPACITY: usize = 128;
+
+        self.peer_event_broadcast_channel_capacity
+            .unwrap_or(PEER_EVENT_BROADCAST_CHANNEL_CAPACITY)
+    }
+}
+
+impl QuicConfig {
+    pub(crate) fn transport_config(&self) -> quinn::TransportConfig {
+        let mut config = quinn::TransportConfig::default();
+
+        if let Some(max) = self
+            .max_concurrent_bidi_streams
+            .map(|n| VarInt::try_from(n).unwrap_or(VarInt::MAX))
+        {
+            config.max_concurrent_bidi_streams(max);
+        }
+
+        if let Some(max) = self
+            .max_concurrent_uni_streams
+            .map(|n| VarInt::try_from(n).unwrap_or(VarInt::MAX))
+        {
+            config.max_concurrent_uni_streams(max);
+        }
+
+        if let Some(max) = self
+            .max_idle_timeout_ms
+            .map(|n| VarInt::try_from(n).unwrap_or(VarInt::MAX))
+            .map(Into::into)
+        {
+            config.max_idle_timeout(Some(max));
+        }
+
+        if let Some(keep_alive_interval) = self.keep_alive_interval_ms.map(Duration::from_millis) {
+            config.keep_alive_interval(Some(keep_alive_interval));
+        }
+
+        config
+    }
+}
 
 #[derive(Debug, Default)]
 pub struct EndpointConfigBuilder {
@@ -16,22 +150,7 @@ pub struct EndpointConfigBuilder {
     /// extension to describe, e.g., the valid DNS name.
     pub server_name: Option<String>,
 
-    /// How long to wait to hear from a peer before timing out a connection.
-    ///
-    /// In the absence of any keep-alive messages, connections will be closed if they remain idle
-    /// for at least this duration.
-    ///
-    /// If unspecified, this will default to [`EndpointConfig::DEFAULT_IDLE_TIMEOUT`].
-    ///
-    /// Maximum possible value is 2^62.
-    pub idle_timeout: Option<Duration>,
-
-    /// Interval at which to send keep-alives to maintain otherwise idle connections.
-    ///
-    /// Keep-alives prevent otherwise idle connections from timing out.
-    ///
-    /// If unspecified, this will default to `None`, disabling keep-alives.
-    pub keep_alive_interval: Option<Duration>,
+    pub config: Option<Config>,
 }
 
 impl EndpointConfigBuilder {
@@ -44,8 +163,13 @@ impl EndpointConfigBuilder {
         self
     }
 
-    pub fn idle_timeout(mut self, duration: Duration) -> Self {
-        self.idle_timeout = Some(duration);
+    pub fn config(mut self, config: Config) -> Self {
+        self.config = Some(config);
+        self
+    }
+
+    pub fn keypair(mut self, keypair: ed25519_dalek::Keypair) -> Self {
+        self.keypair = Some(keypair);
         self
     }
 
@@ -61,15 +185,12 @@ impl EndpointConfigBuilder {
     pub fn build(self) -> Result<EndpointConfig> {
         let keypair = self.keypair.unwrap();
         let server_name = self.server_name.unwrap();
-        let idle_timeout = self
-            .idle_timeout
-            .unwrap_or(EndpointConfig::DEFAULT_IDLE_TIMEOUT);
-        let keep_alive_interval = self.keep_alive_interval;
+        let config = self.config.unwrap_or_default();
 
         let cert_verifier = Arc::new(CertVerifier(server_name.clone()));
         let (certificate, pkcs8_der) = Self::generate_cert(&keypair, &server_name);
 
-        let transport_config = Self::transport_config(idle_timeout, keep_alive_interval)?;
+        let transport_config = Arc::new(config.transport_config());
         let server_config = Self::server_config(
             certificate.clone(),
             pkcs8_der.clone(),
@@ -101,20 +222,6 @@ impl EndpointConfigBuilder {
         let keypair = ed25519_dalek::Keypair::from_bytes(&keypair.to_bytes()).unwrap();
         let certificate = keypair_to_certificate(vec![server_name.to_owned()], keypair).unwrap();
         (certificate, key_der)
-    }
-
-    fn transport_config(
-        idle_timeout: Duration,
-        keep_alive_interval: Option<Duration>,
-    ) -> Result<Arc<quinn::TransportConfig>> {
-        let idle_timeout = IdleTimeout::try_from(idle_timeout)?;
-        let mut config = quinn::TransportConfig::default();
-
-        config
-            .max_idle_timeout(Some(idle_timeout))
-            .keep_alive_interval(keep_alive_interval);
-
-        Ok(Arc::new(config))
     }
 
     fn server_config(
@@ -171,12 +278,6 @@ pub struct EndpointConfig {
 }
 
 impl EndpointConfig {
-    /// Default for [`EndpointConfig::idle_timeout`] (30 seconds).
-    ///
-    /// This is based on average time in which routers would close the UDP mapping to the peer if they
-    /// see no conversation between them.
-    pub const DEFAULT_IDLE_TIMEOUT: Duration = Duration::from_secs(30);
-
     pub fn builder() -> EndpointConfigBuilder {
         EndpointConfigBuilder::new()
     }

@@ -68,7 +68,7 @@ impl rustls::server::ClientCertVerifier for CertVerifier {
     }
 }
 
-impl<'a> rustls::client::ServerCertVerifier for CertVerifier {
+impl rustls::client::ServerCertVerifier for CertVerifier {
     // Verifies this is a valid certificate self-signed by the public key we expect(in PSK)
     // 1. we check the equality of the certificate's public key with the key we expect
     // 2. we prepare arguments for webpki's certificate verification (following the rustls implementation)

@@ -88,6 +88,9 @@ impl Connection {
     /// Open a unidirection stream to the peer.
     ///
     /// Messages sent over the stream will arrive at the peer in the order they were sent.
+    //TODO Today when a SendStream is dropped, it still attempts to re-transmit any data that was
+    // previously enqueued. This may be non-ideal for dealing with things like timeouts and we may
+    // want to look at explicitly calling Reset on the stream if it is dropped pre-maturely.
     pub async fn open_uni(&self) -> Result<SendStream, ConnectionError> {
         self.inner.open_uni().await
     }
@@ -103,7 +106,6 @@ impl Connection {
     }
 
     /// Close the connection immediately.
-    ///
     ///
     /// This is not a graceful close - pending operations will fail immediately and data on
     /// unfinished streams is not guaranteed to be delivered.

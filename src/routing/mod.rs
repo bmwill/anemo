@@ -36,6 +36,7 @@ pub struct Router {
 }
 
 impl Router {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self {
             routes: Default::default(),

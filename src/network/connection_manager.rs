@@ -1,7 +1,7 @@
 use super::request_handler::InboundRequestHandler;
 use crate::{
-    endpoint::NewConnection, types::PeerInfo, Connecting, Connection, ConnectionOrigin, Endpoint,
-    Incoming, PeerId, Request, Response, Result,
+    config::Config, endpoint::NewConnection, types::PeerInfo, Connecting, Connection,
+    ConnectionOrigin, Endpoint, Incoming, PeerId, Request, Response, Result,
 };
 use bytes::Bytes;
 use futures::{
@@ -13,14 +13,9 @@ use std::{
     convert::Infallible,
     net::SocketAddr,
     sync::{Arc, RwLock},
-    time::Duration,
 };
 use tower::util::BoxCloneService;
 use tracing::{error, info};
-
-const CONNECTIVITY_CHECK_INTERVAL_MS: u64 = 5_000; // 5 seconds
-const MAX_CONNECTION_BACKOFF_MS: u64 = 60_000; // 1 minute
-const _CONNECTION_BACKOFF_MS: u64 = 10_000; // 10 seconds
 
 #[derive(Debug)]
 pub enum ConnectionManagerRequest {
@@ -33,6 +28,8 @@ struct ConnectingOutput {
 }
 
 pub struct ConnectionManager {
+    config: Arc<Config>,
+
     endpoint: Arc<Endpoint>,
 
     mailbox: Fuse<tokio_stream::wrappers::ReceiverStream<ConnectionManagerRequest>>,
@@ -44,24 +41,22 @@ pub struct ConnectionManager {
     incoming: Fuse<Incoming>,
 
     service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
-
-    /// Trigger connectivity checks every interval.
-    connectivity_check_interval: Duration,
-    /// Maximum delay between 2 consecutive attempts to connect with a peer.
-    _max_connection_backoff: Duration,
 }
 
 impl ConnectionManager {
     pub fn new(
+        config: Arc<Config>,
         endpoint: Arc<Endpoint>,
         active_peers: ActivePeers,
         known_peers: KnownPeers,
         incoming: Incoming,
         service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
     ) -> (Self, tokio::sync::mpsc::Sender<ConnectionManagerRequest>) {
-        let (sender, reciever) = tokio::sync::mpsc::channel(128);
+        let (sender, reciever) =
+            tokio::sync::mpsc::channel(config.connection_manager_channel_capacity());
         (
             Self {
+                config,
                 endpoint,
                 mailbox: tokio_stream::wrappers::ReceiverStream::new(reciever).fuse(),
                 pending_connections: FuturesUnordered::new(),
@@ -70,8 +65,6 @@ impl ConnectionManager {
                 known_peers,
                 incoming: incoming.fuse(),
                 service,
-                connectivity_check_interval: Duration::from_millis(CONNECTIVITY_CHECK_INTERVAL_MS),
-                _max_connection_backoff: Duration::from_millis(MAX_CONNECTION_BACKOFF_MS),
             },
             sender,
         )
@@ -86,7 +79,7 @@ impl ConnectionManager {
     pub async fn start(mut self) {
         info!("ConnectionManager started");
 
-        let mut interval = tokio::time::interval(self.connectivity_check_interval);
+        let mut interval = tokio::time::interval(self.config.connectivity_check_interval());
 
         loop {
             futures::select! {
@@ -205,8 +198,9 @@ impl ConnectionManager {
         // Limit the number of outstanding connections attempting to be established
         let number_to_dial = std::cmp::min(
             eligible.len(),
-            // TODO make this configurable
-            100_usize.saturating_sub(self.pending_connections.len()),
+            self.config
+                .max_concurrent_outstanding_connecting_connections()
+                .saturating_sub(self.pending_connections.len()),
         );
 
         for mut peer in eligible.into_iter().take(number_to_dial) {

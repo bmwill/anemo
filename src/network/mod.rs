@@ -1,4 +1,6 @@
-use crate::{Endpoint, Incoming, PeerId, Request, Response, Result};
+use crate::{
+    config::Config, Endpoint, EndpointConfig, Incoming, PeerId, Request, Response, Result,
+};
 use anyhow::anyhow;
 use bytes::Bytes;
 use std::{convert::Infallible, net::SocketAddr, sync::Arc};
@@ -15,6 +17,56 @@ pub use peer::Peer;
 mod request_handler;
 mod wire;
 
+pub struct Builder {
+    socket: std::net::UdpSocket,
+    config: Option<Config>,
+    server_name: Option<String>,
+    keypair: Option<ed25519_dalek::Keypair>,
+}
+
+impl Builder {
+    pub fn config(mut self, config: Config) -> Self {
+        self.config = Some(config);
+        self
+    }
+
+    pub fn server_name<T: Into<String>>(mut self, server_name: T) -> Self {
+        self.server_name = Some(server_name.into());
+        self
+    }
+
+    pub fn keypair(mut self, keypair: ed25519_dalek::Keypair) -> Self {
+        self.keypair = Some(keypair);
+        self
+    }
+
+    #[cfg(test)]
+    pub(crate) fn random_keypair(self) -> Self {
+        let mut rng = rand::thread_rng();
+        let keypair = ed25519_dalek::Keypair::generate(&mut rng);
+
+        self.keypair(keypair)
+    }
+
+    pub fn start(
+        self,
+        service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
+    ) -> Result<Network> {
+        let config = self.config.unwrap_or_default();
+        let server_name = self.server_name.unwrap();
+        let keypair = self.keypair.unwrap();
+
+        let endpoint_config = EndpointConfig::builder()
+            .config(config.clone())
+            .server_name(server_name)
+            .keypair(keypair)
+            .build()?;
+        let (endpoint, incoming) = Endpoint::new_with_socket(endpoint_config, self.socket)?;
+
+        Ok(Network::start(endpoint, incoming, service))
+    }
+}
+
 #[derive(Clone)]
 pub struct Network(Arc<NetworkInner>);
 
@@ -27,6 +79,16 @@ pub struct Network(Arc<NetworkInner>);
 // The Network handle could contain a oncecell that is initialized once the builder is finished and
 // until such point, all access results in a Panic.
 impl Network {
+    pub fn bind<A: std::net::ToSocketAddrs>(addr: A) -> Result<Builder> {
+        let socket = std::net::UdpSocket::bind(addr)?;
+        Ok(Builder {
+            socket,
+            config: None,
+            server_name: None,
+            keypair: None,
+        })
+    }
+
     /// Start a network and return a handle to it
     ///
     /// Requires that this is called from within the context of a tokio runtime
@@ -35,11 +97,14 @@ impl Network {
         incoming: Incoming,
         service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
     ) -> Self {
+        let config = Arc::new(Config::default());
+
         let endpoint = Arc::new(endpoint);
-        let active_peers = ActivePeers::new(128);
+        let active_peers = ActivePeers::new(config.peer_event_broadcast_channel_capacity());
         let known_peers = KnownPeers::new();
 
         let (connection_manager, connection_manager_handle) = ConnectionManager::new(
+            config.clone(),
             endpoint.clone(),
             active_peers.clone(),
             known_peers.clone(),
@@ -48,6 +113,7 @@ impl Network {
         );
 
         let network = Self(Arc::new(NetworkInner {
+            _config: config,
             endpoint,
             active_peers,
             known_peers,
@@ -96,6 +162,7 @@ impl Network {
 }
 
 struct NetworkInner {
+    _config: Arc<Config>,
     endpoint: Arc<Endpoint>,
     active_peers: ActivePeers,
     known_peers: KnownPeers,
@@ -164,11 +231,8 @@ impl Drop for NetworkInner {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{config::EndpointConfig, Result};
-    use std::{
-        net::{Ipv4Addr, SocketAddrV4},
-        time::Duration,
-    };
+    use crate::Result;
+    use std::net::{Ipv4Addr, SocketAddrV4};
     use tower::ServiceExt;
     use tracing::trace;
 
@@ -197,15 +261,21 @@ mod test {
     }
 
     fn build_network() -> Result<Network> {
-        let config = EndpointConfig::random("test");
-        let (endpoint, incoming) = Endpoint::new(config, "localhost:0")?;
+        build_network_with_addr("localhost:0")
+    }
+
+    fn build_network_with_addr(addr: &str) -> Result<Network> {
+        let network = Network::bind(addr)?
+            .random_keypair()
+            .server_name("test")
+            .start(echo_service())?;
+
         trace!(
-            address =% endpoint.local_addr(),
-            peer_id =% endpoint.peer_id(),
+            address =% network.local_addr(),
+            peer_id =% network.peer_id(),
             "starting network"
         );
 
-        let network = Network::start(endpoint, incoming, echo_service());
         Ok(network)
     }
 
@@ -223,25 +293,8 @@ mod test {
     async fn ip6_calling_ip4() -> Result<()> {
         let _gaurd = crate::init_tracing_for_testing();
 
-        let config = EndpointConfig::random("test");
-        let (endpoint, incoming) = Endpoint::new(config, "[::]:0")?;
-        info!(
-            address =% endpoint.local_addr(),
-            peer_id =% endpoint.peer_id(),
-            "starting network"
-        );
-
-        let network_1 = Network::start(endpoint, incoming, echo_service());
-
-        let config = EndpointConfig::random("test");
-        let (endpoint, incoming) = Endpoint::new(config, "127.0.0.1:0")?;
-        info!(
-            address =% endpoint.local_addr(),
-            peer_id =% endpoint.peer_id(),
-            "starting network"
-        );
-
-        let network_2 = Network::start(endpoint, incoming, echo_service());
+        let network_1 = build_network_with_addr("[::]:0")?;
+        let network_2 = build_network_with_addr("127.0.0.1:0")?;
 
         let msg = b"The Way of Kings";
         let peer = network_1.connect(network_2.local_addr()).await?;
@@ -258,25 +311,8 @@ mod test {
     async fn localhost_calling_anyaddr() -> Result<()> {
         let _gaurd = crate::init_tracing_for_testing();
 
-        let config = EndpointConfig::random("test");
-        let (endpoint, incoming) = Endpoint::new(config, "0.0.0.0:0")?;
-        info!(
-            address =% endpoint.local_addr(),
-            peer_id =% endpoint.peer_id(),
-            "starting network"
-        );
-
-        let network_1 = Network::start(endpoint, incoming, echo_service());
-
-        let config = EndpointConfig::random("test");
-        let (endpoint, incoming) = Endpoint::new(config, "127.0.0.1:0")?;
-        info!(
-            address =% endpoint.local_addr(),
-            peer_id =% endpoint.peer_id(),
-            "starting network"
-        );
-
-        let network_2 = Network::start(endpoint, incoming, echo_service());
+        let network_1 = build_network_with_addr("0.0.0.0:0")?;
+        let network_2 = build_network_with_addr("127.0.0.1:0")?;
 
         let msg = b"The Way of Kings";
         let peer = network_2
@@ -305,29 +341,8 @@ mod test {
     async fn dropped_connection() -> Result<()> {
         let _gaurd = crate::init_tracing_for_testing();
 
-        let config = EndpointConfig::builder()
-            .random_keypair()
-            .server_name("test")
-            .idle_timeout(Duration::from_secs(1))
-            .build()?;
-        let (endpoint, incoming) = Endpoint::new(config, "localhost:0")?;
-        info!(
-            address =% endpoint.local_addr(),
-            peer_id =% endpoint.peer_id(),
-            "starting network"
-        );
-
-        let network_1 = Network::start(endpoint, incoming, echo_service());
-
-        let config = EndpointConfig::random("test");
-        let (endpoint, incoming) = Endpoint::new(config, "localhost:0")?;
-        info!(
-            address =% endpoint.local_addr(),
-            peer_id =% endpoint.peer_id(),
-            "starting network"
-        );
-
-        let network_2 = Network::start(endpoint, incoming, echo_service());
+        let network_1 = build_network()?;
+        let network_2 = build_network()?;
 
         let msg = b"The Way of Kings";
         let peer = network_1.connect(network_2.local_addr()).await?;

@@ -17,11 +17,10 @@ pub struct Endpoint {
 }
 
 impl Endpoint {
-    pub fn new<A: std::net::ToSocketAddrs>(
+    pub fn new_with_socket(
         config: EndpointConfig,
-        addr: A,
+        socket: std::net::UdpSocket,
     ) -> Result<(Self, Incoming)> {
-        let socket = std::net::UdpSocket::bind(addr)?;
         let local_addr = socket.local_addr()?;
         let server_config = config.server_config().clone();
         let client_config = config.client_config().clone();
@@ -36,6 +35,14 @@ impl Endpoint {
         };
         let incoming = Incoming::new(incoming);
         Ok((endpoint, incoming))
+    }
+
+    pub fn new<A: std::net::ToSocketAddrs>(
+        config: EndpointConfig,
+        addr: A,
+    ) -> Result<(Self, Incoming)> {
+        let socket = std::net::UdpSocket::bind(addr)?;
+        Self::new_with_socket(config, socket)
     }
 
     pub fn connect_with_address<A: std::net::ToSocketAddrs>(&self, addr: A) -> Result<Connecting> {
@@ -161,13 +168,15 @@ mod test {
 
         let msg = b"hello";
         let config_1 = EndpointConfig::random("test");
-        let (endpoint_1, _incoming_1) = Endpoint::new(config_1, "localhost:0")?;
+        let socket = std::net::UdpSocket::bind("localhost:0")?;
+        let (endpoint_1, _incoming_1) = Endpoint::new_with_socket(config_1, socket)?;
         let pubkey_1 = endpoint_1.config.keypair().public;
 
         println!("1: {}", endpoint_1.local_addr());
 
         let config_2 = EndpointConfig::random("test");
-        let (endpoint_2, mut incoming_2) = Endpoint::new(config_2, "localhost:0")?;
+        let socket = std::net::UdpSocket::bind("localhost:0")?;
+        let (endpoint_2, mut incoming_2) = Endpoint::new_with_socket(config_2, socket)?;
         let pubkey_2 = endpoint_2.config.keypair().public;
         let addr_2 = endpoint_2.local_addr();
         println!("2: {}", endpoint_2.local_addr());
