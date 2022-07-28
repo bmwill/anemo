@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::{sync::Arc, time::Duration};
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Config {
     pub quic: Option<QuicConfig>,
 
@@ -29,6 +30,7 @@ pub struct Config {
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct QuicConfig {
     pub max_concurrent_bidi_streams: Option<u64>,
     pub max_concurrent_uni_streams: Option<u64>,
