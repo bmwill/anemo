@@ -31,6 +31,51 @@ async fn basic_network() -> Result<()> {
     Ok(())
 }
 
+#[tokio::test]
+async fn connect() -> Result<()> {
+    let _gaurd = crate::init_tracing_for_testing();
+
+    let network_1 = build_network()?;
+    let network_2 = build_network()?;
+
+    let peer = network_1.connect(network_2.local_addr()).await?;
+    assert_eq!(peer, network_2.peer_id());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn connect_with_peer_id() -> Result<()> {
+    let _gaurd = crate::init_tracing_for_testing();
+
+    let network_1 = build_network()?;
+    let network_2 = build_network()?;
+
+    let peer = network_1
+        .connect_with_peer_id(network_2.local_addr(), network_2.peer_id())
+        .await?;
+    assert_eq!(peer, network_2.peer_id());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn connect_with_invalid_peer_id() -> Result<()> {
+    let _gaurd = crate::init_tracing_for_testing();
+
+    let network_1 = build_network()?;
+    let network_2 = build_network()?;
+    let network_3 = build_network()?;
+
+    // Try to dial network 2, but with network 3's peer id
+    network_1
+        .connect_with_peer_id(network_2.local_addr(), network_3.peer_id())
+        .await
+        .unwrap_err();
+
+    Ok(())
+}
+
 fn build_network() -> Result<Network> {
     build_network_with_addr("localhost:0")
 }

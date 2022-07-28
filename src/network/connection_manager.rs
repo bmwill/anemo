@@ -22,7 +22,7 @@ use tracing::{error, info, instrument};
 
 #[derive(Debug)]
 pub enum ConnectionManagerRequest {
-    ConnectRequest(SocketAddr, tokio::sync::oneshot::Sender<Result<PeerId>>),
+    ConnectRequest(SocketAddr, Option<PeerId>, tokio::sync::oneshot::Sender<Result<PeerId>>),
 }
 
 struct ConnectingOutput {
@@ -112,8 +112,8 @@ impl ConnectionManager {
 
                     info!("recieved new request");
                     match request {
-                        ConnectionManagerRequest::ConnectRequest(address, oneshot) => {
-                            self.handle_connect_request(address, oneshot);
+                        ConnectionManagerRequest::ConnectRequest(address, peer_id, oneshot) => {
+                            self.handle_connect_request(address, peer_id, oneshot);
                         }
                     }
                 }
@@ -151,9 +151,10 @@ impl ConnectionManager {
     fn handle_connect_request(
         &mut self,
         address: SocketAddr,
+        peer_id: Option<PeerId>,
         oneshot: tokio::sync::oneshot::Sender<Result<PeerId>>,
     ) {
-        self.dial_peer(address, oneshot);
+        self.dial_peer(address, peer_id, oneshot);
     }
 
     fn handle_incoming(&mut self, connecting: Connecting) {
@@ -192,6 +193,8 @@ impl ConnectionManager {
         }
     }
 
+    // TODO maybe look into marking an address as invalid if we weren't able to connect due to a
+    // mismatching cryptographic identity
     fn handle_connectivity_check(&mut self, now: std::time::Instant) {
         // Drain any completed dials by checking if the oneshot channel has been filled or not
         self.pending_dials
@@ -275,7 +278,7 @@ impl ConnectionManager {
                 % peer.address.len();
 
             let address = peer.address.remove(idx);
-            self.dial_peer(address, sender);
+            self.dial_peer(address, Some(peer.peer_id), sender);
             self.pending_dials.insert(peer.peer_id, reciever);
         }
     }
@@ -283,9 +286,14 @@ impl ConnectionManager {
     fn dial_peer(
         &mut self,
         address: SocketAddr,
+        peer_id: Option<PeerId>,
         oneshot: tokio::sync::oneshot::Sender<Result<PeerId>>,
     ) {
-        let connecting = self.endpoint.connect(address);
+        let connecting = if let Some(peer_id) = peer_id {
+            self.endpoint.connect_with_expected_public_key(address, peer_id.0)
+        } else {
+            self.endpoint.connect(address)
+        };
         let join_handle = JoinHandle(tokio::spawn(async move {
             let connecting_result = match connecting {
                 Ok(connecting) => connecting.await,

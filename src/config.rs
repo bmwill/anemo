@@ -1,4 +1,7 @@
-use crate::{crypto::CertVerifier, Result};
+use crate::{
+    crypto::{CertVerifier, ExpectedCertVerifier},
+    Result,
+};
 use pkcs8::EncodePrivateKey;
 // use ed25519::pkcs8::EncodePrivateKey;
 use quinn::VarInt;
@@ -199,16 +202,17 @@ impl EndpointConfigBuilder {
             certificate.clone(),
             pkcs8_der.clone(),
             cert_verifier,
-            transport_config,
+            transport_config.clone(),
         )?;
 
         Ok(EndpointConfig {
-            _certificate: certificate,
-            _pkcs8_der: pkcs8_der,
+            certificate,
+            pkcs8_der,
             keypair,
             quinn_server_config: server_config,
             quinn_client_config: client_config,
             server_name,
+            transport_config,
         })
     }
 
@@ -244,10 +248,6 @@ impl EndpointConfigBuilder {
         cert_verifier: Arc<CertVerifier>,
         transport_config: Arc<quinn::TransportConfig>,
     ) -> Result<quinn::ClientConfig> {
-        // setup certificates
-        let mut roots = rustls::RootCertStore::empty();
-        roots.add(&cert).map_err(|_e| ConfigError::Webpki)?;
-
         let client_crypto = rustls::ClientConfig::builder()
             .with_safe_defaults()
             .with_custom_certificate_verifier(cert_verifier)
@@ -261,8 +261,8 @@ impl EndpointConfigBuilder {
 
 #[derive(Debug)]
 pub struct EndpointConfig {
-    _certificate: rustls::Certificate,
-    _pkcs8_der: rustls::PrivateKey,
+    certificate: rustls::Certificate,
+    pkcs8_der: rustls::PrivateKey,
     keypair: ed25519_dalek::Keypair,
     quinn_server_config: quinn::ServerConfig,
     quinn_client_config: quinn::ClientConfig,
@@ -273,6 +273,8 @@ pub struct EndpointConfig {
     /// [Subject Alternative Name](https://tools.ietf.org/html/rfc6125#section-4.1)
     /// extension to describe, e.g., the valid DNS name.
     server_name: String,
+
+    transport_config: Arc<quinn::TransportConfig>,
 }
 
 impl EndpointConfig {
@@ -294,6 +296,23 @@ impl EndpointConfig {
 
     pub fn client_config(&self) -> &quinn::ClientConfig {
         &self.quinn_client_config
+    }
+
+    pub fn client_config_with_expected_server_identity(
+        &self,
+        pubkey: ed25519_dalek::PublicKey,
+    ) -> quinn::ClientConfig {
+        let server_cert_verifier =
+            ExpectedCertVerifier(CertVerifier(self.server_name().into()), pubkey);
+        let client_crypto = rustls::ClientConfig::builder()
+            .with_safe_defaults()
+            .with_custom_certificate_verifier(Arc::new(server_cert_verifier))
+            .with_single_cert(vec![self.certificate.clone()], self.pkcs8_der.clone())
+            .unwrap();
+
+        let mut client = quinn::ClientConfig::new(Arc::new(client_crypto));
+        client.transport = self.transport_config.clone();
+        client
     }
 
     #[cfg(test)]
@@ -345,9 +364,6 @@ enum ConfigError {
 
     #[error("An error occurred within rustls")]
     Rustls(#[from] rustls::Error),
-
-    #[error("An error occurred generating client config certificates")]
-    Webpki,
 }
 
 fn keypair_to_certificate(

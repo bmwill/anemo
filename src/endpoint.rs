@@ -20,10 +20,8 @@ impl Endpoint {
     pub fn new(config: EndpointConfig, socket: std::net::UdpSocket) -> Result<(Self, Incoming)> {
         let local_addr = socket.local_addr()?;
         let server_config = config.server_config().clone();
-        let client_config = config.client_config().clone();
-        let (mut endpoint, incoming) =
+        let (endpoint, incoming) =
             quinn::Endpoint::new(Default::default(), Some(server_config), socket)?;
-        endpoint.set_default_client_config(client_config);
 
         let endpoint = Self {
             inner: endpoint,
@@ -54,8 +52,27 @@ impl Endpoint {
     }
 
     pub fn connect(&self, addr: SocketAddr) -> Result<Connecting> {
+        self.connect_with_client_config(self.config.client_config().clone(), addr)
+    }
+
+    pub fn connect_with_expected_public_key(
+        &self,
+        addr: SocketAddr,
+        public_key: ed25519_dalek::PublicKey,
+    ) -> Result<Connecting> {
+        let config = self
+            .config
+            .client_config_with_expected_server_identity(public_key);
+        self.connect_with_client_config(config, addr)
+    }
+
+    fn connect_with_client_config(
+        &self,
+        config: quinn::ClientConfig,
+        addr: SocketAddr,
+    ) -> Result<Connecting> {
         self.inner
-            .connect(addr, self.config.server_name())
+            .connect_with(config, addr, self.config.server_name())
             .map_err(Into::into)
             .map(Connecting::new_outbound)
     }

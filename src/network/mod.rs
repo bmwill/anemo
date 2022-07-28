@@ -146,7 +146,11 @@ impl Network {
     }
 
     pub async fn connect(&self, addr: SocketAddr) -> Result<PeerId> {
-        self.0.connect(addr).await
+        self.0.connect(addr, None).await
+    }
+
+    pub async fn connect_with_peer_id(&self, addr: SocketAddr, peer_id: PeerId) -> Result<PeerId> {
+        self.0.connect(addr, Some(peer_id)).await
     }
 
     pub fn disconnect(&self, peer: PeerId) -> Result<()> {
@@ -193,10 +197,12 @@ impl NetworkInner {
         self.endpoint.peer_id()
     }
 
-    async fn connect(&self, addr: SocketAddr) -> Result<PeerId> {
+    async fn connect(&self, addr: SocketAddr, peer_id: Option<PeerId>) -> Result<PeerId> {
         let (sender, reciever) = tokio::sync::oneshot::channel();
         self.connection_manager_handle
-            .send(ConnectionManagerRequest::ConnectRequest(addr, sender))
+            .send(ConnectionManagerRequest::ConnectRequest(
+                addr, peer_id, sender,
+            ))
             .await
             .expect("ConnectionManager should still be up");
         reciever.await?

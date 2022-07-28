@@ -131,6 +131,55 @@ impl rustls::client::ServerCertVerifier for CertVerifier {
     }
 }
 
+#[derive(Clone, Debug)]
+pub(crate) struct ExpectedCertVerifier(
+    pub(crate) CertVerifier,
+    pub(crate) ed25519_dalek::PublicKey,
+);
+
+impl rustls::client::ServerCertVerifier for ExpectedCertVerifier {
+    // Verifies this is a valid certificate self-signed by the public key we expect(in PSK)
+    // 1. we check the equality of the certificate's public key with the key we expect
+    // 2. we prepare arguments for webpki's certificate verification (following the rustls implementation)
+    //    placing the public key at the root of the certificate chain (as it should be for a self-signed certificate)
+    // 3. we call webpki's certificate verification
+    fn verify_server_cert(
+        &self,
+        end_entity: &rustls::Certificate,
+        intermediates: &[rustls::Certificate],
+        server_name: &rustls::ServerName,
+        scts: &mut dyn Iterator<Item = &[u8]>,
+        ocsp_response: &[u8],
+        now: std::time::SystemTime,
+    ) -> Result<rustls::client::ServerCertVerified, rustls::Error> {
+        use x509_parser::{certificate::X509Certificate, traits::FromDer};
+
+        // Step 1: Check this matches the key we expect
+        let cert = X509Certificate::from_der(&end_entity.0[..])
+            .map_err(|_| rustls::Error::InvalidCertificateEncoding)?;
+        let spki = cert.1.public_key();
+        let key =
+            ed25519_dalek::PublicKey::from_bytes(spki.subject_public_key.data).map_err(|e| {
+                rustls::Error::InvalidCertificateData(format!("invalid ed25519 public key: {e}"))
+            })?;
+        if key != self.1 {
+            return Err(rustls::Error::InvalidCertificateData(format!(
+                "invalid peer certificate: received {:?} instead of expected {:?}",
+                key, self.1,
+            )));
+        }
+
+        self.0.verify_server_cert(
+            end_entity,
+            intermediates,
+            server_name,
+            scts,
+            ocsp_response,
+            now,
+        )
+    }
+}
+
 type CertChainAndRoots<'a> = (
     webpki::EndEntityCert<'a>,
     Vec<&'a [u8]>,
