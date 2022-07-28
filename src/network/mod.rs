@@ -1,6 +1,8 @@
-use crate::config::EndpointConfig;
-use crate::endpoint::{Endpoint, Incoming};
-use crate::{Config, PeerId, Request, Response, Result};
+use crate::{
+    config::EndpointConfig,
+    endpoint::{Endpoint, Incoming},
+    Config, PeerId, Request, Response, Result,
+};
 use anyhow::anyhow;
 use bytes::Bytes;
 use std::{convert::Infallible, net::SocketAddr, sync::Arc};

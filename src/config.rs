@@ -3,8 +3,7 @@ use pkcs8::EncodePrivateKey;
 // use ed25519::pkcs8::EncodePrivateKey;
 use quinn::VarInt;
 use rcgen::{CertificateParams, KeyPair, SignatureAlgorithm};
-use serde::Deserialize;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{sync::Arc, time::Duration};
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]

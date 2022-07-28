@@ -92,8 +92,7 @@ impl std::fmt::Display for ConnectionOrigin {
 
 #[cfg(test)]
 mod test {
-    use super::ConnectionOrigin;
-    use super::PeerId;
+    use super::{ConnectionOrigin, PeerId};
 
     #[test]
     fn connection_origin_debug() {

@@ -1,7 +1,9 @@
 use super::request_handler::InboundRequestHandler;
-use crate::endpoint::{Connecting, Endpoint, Incoming};
 use crate::{
-    config::Config, connection::Connection, endpoint::NewConnection, types::PeerInfo,
+    config::Config,
+    connection::Connection,
+    endpoint::{Connecting, Endpoint, Incoming, NewConnection},
+    types::PeerInfo,
     ConnectionOrigin, PeerId, Request, Response, Result,
 };
 use bytes::Bytes;
