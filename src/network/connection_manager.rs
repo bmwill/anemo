@@ -38,6 +38,7 @@ pub struct ConnectionManager {
     mailbox: Fuse<tokio_stream::wrappers::ReceiverStream<ConnectionManagerRequest>>,
     pending_connections: FuturesUnordered<JoinHandle<ConnectingOutput>>,
     pending_dials: HashMap<PeerId, tokio::sync::oneshot::Receiver<Result<PeerId>>>,
+    dial_backoff_states: HashMap<PeerId, DialBackoffState>,
 
     active_peers: ActivePeers,
     known_peers: KnownPeers,
@@ -69,7 +70,8 @@ impl ConnectionManager {
                 endpoint,
                 mailbox: tokio_stream::wrappers::ReceiverStream::new(reciever).fuse(),
                 pending_connections: FuturesUnordered::new(),
-                pending_dials: Default::default(),
+                pending_dials: HashMap::default(),
+                dial_backoff_states: HashMap::default(),
                 active_peers,
                 known_peers,
                 incoming: incoming.fuse(),
@@ -95,8 +97,8 @@ impl ConnectionManager {
 
         loop {
             futures::select! {
-                _ = interval.tick().fuse() => {
-                    self.handle_connectivity_check();
+                now = interval.tick().fuse() => {
+                    self.handle_connectivity_check(now.into_std());
                 }
                 maybe_request = self.mailbox.next() => {
                     // Once all handles to the ConnectionManager's mailbox have been dropped this
@@ -190,13 +192,45 @@ impl ConnectionManager {
         }
     }
 
-    //TODO don't always dial the first address
-    //TODO handle backoffs
-    fn handle_connectivity_check(&mut self) {
+    fn handle_connectivity_check(&mut self, now: std::time::Instant) {
         // Drain any completed dials by checking if the oneshot channel has been filled or not
         self.pending_dials
-            .retain(|_, oneshot| match oneshot.try_recv() {
-                Ok(_) | Err(tokio::sync::oneshot::error::TryRecvError::Closed) => false,
+            .retain(|peer_id, oneshot| match oneshot.try_recv() {
+                // We were able to successfully dial the Peer
+                Ok(Ok(returned_peer_id)) => {
+                    debug_assert_eq!(peer_id, &returned_peer_id);
+
+                    self.dial_backoff_states.remove(peer_id);
+                    false
+                }
+
+                // Dialing failed for some reason
+                Ok(Err(_)) => {
+                    match self.dial_backoff_states.entry(*peer_id) {
+                        Entry::Occupied(mut entry) => {
+                            entry.get_mut().update(
+                                now,
+                                self.config.connection_backoff(),
+                                self.config.max_connection_backoff(),
+                            );
+                        }
+                        Entry::Vacant(entry) => {
+                            entry.insert(DialBackoffState::new(
+                                now,
+                                self.config.connection_backoff(),
+                                self.config.max_connection_backoff(),
+                            ));
+                        }
+                    }
+
+                    false
+                }
+
+                Err(tokio::sync::oneshot::error::TryRecvError::Closed) => {
+                    panic!("BUG: connection-manager never finished dialing a peer")
+                }
+
+                // Dialing is in progress
                 Err(tokio::sync::oneshot::error::TryRecvError::Empty) => true,
             });
 
@@ -213,6 +247,10 @@ impl ConnectionManager {
                 !peer_info.address.is_empty() // The peer has an address we can dial
                 && !active_peers.contains(&peer_info.peer_id) // The node is not already connected.
                 && !self.pending_dials.contains_key(&peer_info.peer_id) // There is no pending dial to this node.
+                && self.dial_backoff_states  // check that `now` is after the backoff time, if it exists
+                    .get(&peer_info.peer_id)
+                    .map(|state| now > state.backoff)
+                    .unwrap_or(true)
             })
             .collect::<Vec<_>>();
 
@@ -227,7 +265,16 @@ impl ConnectionManager {
         for mut peer in eligible.into_iter().take(number_to_dial) {
             let (sender, reciever) = tokio::sync::oneshot::channel();
 
-            let address = peer.address.remove(0);
+            // Select the index of the address to dial by mapping the number of attempts we've made
+            // so far into the Peer's known addresses
+            let idx = self
+                .dial_backoff_states
+                .get(&peer.peer_id)
+                .map(|state| state.attempts)
+                .unwrap_or(0)
+                % peer.address.len();
+
+            let address = peer.address.remove(idx);
             self.dial_peer(address, sender);
             self.pending_dials.insert(peer.peer_id, reciever);
         }
@@ -250,6 +297,48 @@ impl ConnectionManager {
             }
         }));
         self.pending_connections.push(join_handle);
+    }
+}
+
+/// The state needed to decide when and with which address another attempt to dial a peer should be
+/// conducted.
+#[derive(Debug)]
+struct DialBackoffState {
+    /// The earliest time in which we should attempt to dial this peer again.
+    backoff: std::time::Instant,
+    /// The number of attempts made to dial this peer.
+    attempts: usize,
+}
+
+impl DialBackoffState {
+    fn new(
+        now: std::time::Instant,
+        backoff_step: std::time::Duration,
+        max_backoff: std::time::Duration,
+    ) -> Self {
+        let mut state = Self {
+            backoff: now,
+            attempts: 0,
+        };
+
+        state.update(now, backoff_step, max_backoff);
+        state
+    }
+
+    fn update(
+        &mut self,
+        now: std::time::Instant,
+        backoff_step: std::time::Duration,
+        max_backoff: std::time::Duration,
+    ) {
+        self.attempts += 1;
+
+        let backoff_duration = std::cmp::max(
+            max_backoff,
+            backoff_step.saturating_mul(self.attempts.try_into().unwrap_or(u32::MAX)),
+        );
+
+        self.backoff = now + backoff_duration;
     }
 }
 

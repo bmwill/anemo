@@ -83,7 +83,7 @@ impl Config {
     }
 
     #[allow(unused)]
-    pub(crate) fn connection_backoff_ms(&self) -> Duration {
+    pub(crate) fn connection_backoff(&self) -> Duration {
         const CONNECTION_BACKOFF_MS: u64 = 10_000; // 10 seconds
 
         Duration::from_millis(self.connection_backoff_ms.unwrap_or(CONNECTION_BACKOFF_MS))
