@@ -329,7 +329,6 @@ impl EndpointConfig {
 ///
 /// The private key must be DER-encoded ASN.1 in either
 /// PKCS#8 or PKCS#1 format.
-// TODO: move this to rccheck?
 trait ToPKCS8 {
     fn to_pkcs8_bytes(&self) -> Vec<u8>;
 }
@@ -343,27 +342,6 @@ impl ToPKCS8 for ed25519_dalek::Keypair {
         let pkcs8 = kpb.to_pkcs8_der().unwrap();
         pkcs8.as_bytes().to_vec()
     }
-}
-
-/// An error that occured when generating the TLS certificate.
-#[derive(Debug, thiserror::Error)]
-#[error(transparent)]
-struct CertificateGenerationError(
-    // Though there are multiple different errors that could occur by the code, since we are
-    // generating a certificate, they should only really occur due to buggy implementations. As
-    // such, we don't attempt to expose more detail than 'something went wrong', which will
-    // hopefully be enough for someone to file a bug report...
-    Box<dyn std::error::Error + Send + Sync>,
-);
-
-/// Configuration errors.
-#[derive(Debug, thiserror::Error)]
-enum ConfigError {
-    #[error("An error occurred when generating the TLS certificate")]
-    CertificateGeneration(#[from] CertificateGenerationError),
-
-    #[error("An error occurred within rustls")]
-    Rustls(#[from] rustls::Error),
 }
 
 fn keypair_to_certificate(
