@@ -91,17 +91,17 @@ impl<T> Request<T> {
         &mut self.head.headers
     }
 
-    pub fn extensions(&self) -> &http::Extensions {
+    pub(crate) fn extensions(&self) -> &http::Extensions {
         &self.head.extensions
     }
 
-    pub fn extensions_mut(&mut self) -> &mut http::Extensions {
+    pub(crate) fn extensions_mut(&mut self) -> &mut http::Extensions {
         &mut self.head.extensions
     }
 
     // Returns the PeerId of the peer who created this Request
     pub fn peer_id(&self) -> Option<&PeerId> {
-        self.head.extensions.get::<PeerId>()
+        self.extensions().get::<PeerId>()
     }
 
     pub fn body(&self) -> &T {
