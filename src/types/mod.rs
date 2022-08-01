@@ -1,7 +1,9 @@
+mod address;
 mod peer_id;
 pub mod request;
 pub mod response;
 
+pub use address::Address;
 pub use peer_id::{ConnectionOrigin, PeerId};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -47,7 +49,7 @@ pub enum PeerAffinity {
 pub struct PeerInfo {
     pub peer_id: PeerId,
     pub affinity: PeerAffinity,
-    pub address: Vec<std::net::SocketAddr>,
+    pub address: Vec<Address>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

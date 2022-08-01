@@ -1,9 +1,6 @@
 use crate::{Network, Request, Response, Result};
 use bytes::Bytes;
-use std::{
-    convert::Infallible,
-    net::{Ipv4Addr, SocketAddr, SocketAddrV4},
-};
+use std::convert::Infallible;
 use tower::{util::BoxCloneService, ServiceExt};
 use tracing::trace;
 
@@ -76,12 +73,39 @@ async fn connect_with_invalid_peer_id() -> Result<()> {
     Ok(())
 }
 
+#[tokio::test]
+async fn connect_with_hostname() -> Result<()> {
+    let _gaurd = crate::init_tracing_for_testing();
+
+    let network_1 = build_network()?;
+    let network_2 = build_network()?;
+    let network_3 = build_network()?;
+
+    let peer = network_1
+        .connect_with_peer_id(
+            ("localhost", network_2.local_addr().port()),
+            network_2.peer_id(),
+        )
+        .await?;
+    assert_eq!(peer, network_2.peer_id());
+
+    let peer = network_1
+        .connect_with_peer_id(
+            format!("localhost:{}", network_3.local_addr().port()),
+            network_3.peer_id(),
+        )
+        .await?;
+    assert_eq!(peer, network_3.peer_id());
+
+    Ok(())
+}
+
 fn build_network() -> Result<Network> {
     build_network_with_addr("localhost:0")
 }
 
 fn build_network_with_addr(addr: &str) -> Result<Network> {
-    let network = Network::bind(addr)?
+    let network = Network::bind(addr)
         .random_keypair()
         .server_name("test")
         .start(echo_service())?;
@@ -132,10 +156,7 @@ async fn localhost_calling_anyaddr() -> Result<()> {
 
     let msg = b"The Way of Kings";
     let peer = network_2
-        .connect(SocketAddr::V4(SocketAddrV4::new(
-            Ipv4Addr::LOCALHOST,
-            network_1.local_addr().port(),
-        )))
+        .connect((std::net::Ipv4Addr::LOCALHOST, network_1.local_addr().port()))
         .await?;
 
     let response = network_2
@@ -194,7 +215,7 @@ async fn basic_connectivity_check() -> Result<()> {
     let peer_info_2 = crate::types::PeerInfo {
         peer_id: peer_id_2,
         affinity: crate::types::PeerAffinity::High,
-        address: vec![network_2.local_addr()],
+        address: vec![network_2.local_addr().into()],
     };
     let mut subscriber_1 = network_1.0.active_peers.subscribe().0;
     let mut subscriber_2 = network_2.0.active_peers.subscribe().0;

@@ -3,7 +3,7 @@ use crate::{
     config::Config,
     connection::Connection,
     endpoint::{Connecting, Endpoint, Incoming, NewConnection},
-    types::PeerInfo,
+    types::{PeerInfo, Address},
     ConnectionOrigin, PeerId, Request, Response, Result,
 };
 use bytes::Bytes;
@@ -14,7 +14,6 @@ use futures::{
 use std::{
     collections::{hash_map::Entry, HashMap, HashSet},
     convert::Infallible,
-    net::SocketAddr,
     sync::{Arc, RwLock},
 };
 use tower::util::BoxCloneService;
@@ -22,7 +21,7 @@ use tracing::{error, info, instrument};
 
 #[derive(Debug)]
 pub enum ConnectionManagerRequest {
-    ConnectRequest(SocketAddr, Option<PeerId>, tokio::sync::oneshot::Sender<Result<PeerId>>),
+    ConnectRequest(Address, Option<PeerId>, tokio::sync::oneshot::Sender<Result<PeerId>>),
 }
 
 struct ConnectingOutput {
@@ -150,7 +149,7 @@ impl ConnectionManager {
 
     fn handle_connect_request(
         &mut self,
-        address: SocketAddr,
+        address: Address,
         peer_id: Option<PeerId>,
         oneshot: tokio::sync::oneshot::Sender<Result<PeerId>>,
     ) {
@@ -285,7 +284,7 @@ impl ConnectionManager {
 
     fn dial_peer(
         &mut self,
-        address: SocketAddr,
+        address: Address,
         peer_id: Option<PeerId>,
         oneshot: tokio::sync::oneshot::Sender<Result<PeerId>>,
     ) {

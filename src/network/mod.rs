@@ -1,6 +1,7 @@
 use crate::{
     config::EndpointConfig,
     endpoint::{Endpoint, Incoming},
+    types::Address,
     Config, PeerId, Request, Response, Result,
 };
 use anyhow::anyhow;
@@ -23,7 +24,7 @@ mod wire;
 mod tests;
 
 pub struct Builder {
-    socket: std::net::UdpSocket,
+    bind_address: Address,
     config: Option<Config>,
     server_name: Option<String>,
     keypair: Option<ed25519_dalek::Keypair>,
@@ -66,7 +67,8 @@ impl Builder {
             .server_name(server_name)
             .keypair(keypair)
             .build()?;
-        let (endpoint, incoming) = Endpoint::new(endpoint_config, self.socket)?;
+        let socket = std::net::UdpSocket::bind(self.bind_address)?;
+        let (endpoint, incoming) = Endpoint::new(endpoint_config, socket)?;
 
         Ok(Self::network_start(endpoint, incoming, service, config))
     }
@@ -123,14 +125,13 @@ pub struct Network(Arc<NetworkInner>);
 // The Network handle could contain a oncecell that is initialized once the builder is finished and
 // until such point, all access results in a Panic.
 impl Network {
-    pub fn bind<A: std::net::ToSocketAddrs>(addr: A) -> Result<Builder> {
-        let socket = std::net::UdpSocket::bind(addr)?;
-        Ok(Builder {
-            socket,
+    pub fn bind<A: Into<Address>>(addr: A) -> Builder {
+        Builder {
+            bind_address: addr.into(),
             config: None,
             server_name: None,
             keypair: None,
-        })
+        }
     }
 
     pub fn peers(&self) -> Vec<PeerId> {
@@ -145,12 +146,16 @@ impl Network {
         self.0.known_peers()
     }
 
-    pub async fn connect(&self, addr: SocketAddr) -> Result<PeerId> {
-        self.0.connect(addr, None).await
+    pub async fn connect<A: Into<Address>>(&self, addr: A) -> Result<PeerId> {
+        self.0.connect(addr.into(), None).await
     }
 
-    pub async fn connect_with_peer_id(&self, addr: SocketAddr, peer_id: PeerId) -> Result<PeerId> {
-        self.0.connect(addr, Some(peer_id)).await
+    pub async fn connect_with_peer_id<A: Into<Address>>(
+        &self,
+        addr: A,
+        peer_id: PeerId,
+    ) -> Result<PeerId> {
+        self.0.connect(addr.into(), Some(peer_id)).await
     }
 
     pub fn disconnect(&self, peer: PeerId) -> Result<()> {
@@ -197,7 +202,7 @@ impl NetworkInner {
         self.endpoint.peer_id()
     }
 
-    async fn connect(&self, addr: SocketAddr, peer_id: Option<PeerId>) -> Result<PeerId> {
+    async fn connect(&self, addr: Address, peer_id: Option<PeerId>) -> Result<PeerId> {
         let (sender, reciever) = tokio::sync::oneshot::channel();
         self.connection_manager_handle
             .send(ConnectionManagerRequest::ConnectRequest(

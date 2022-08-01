@@ -1,4 +1,7 @@
-use crate::{config::EndpointConfig, connection::Connection, ConnectionOrigin, PeerId, Result};
+use crate::{
+    config::EndpointConfig, connection::Connection, types::Address, ConnectionOrigin, PeerId,
+    Result,
+};
 use futures::StreamExt;
 use quinn::{Datagrams, IncomingBiStreams, IncomingUniStreams};
 use std::{
@@ -33,44 +36,36 @@ impl Endpoint {
     }
 
     #[cfg(test)]
-    fn new_with_address<A: std::net::ToSocketAddrs>(
+    fn new_with_address<A: Into<Address>>(
         config: EndpointConfig,
         addr: A,
     ) -> Result<(Self, Incoming)> {
-        let socket = std::net::UdpSocket::bind(addr)?;
+        let socket = std::net::UdpSocket::bind(addr.into())?;
         Self::new(config, socket)
     }
 
-    #[allow(unused)]
-    pub fn connect_with_address<A: std::net::ToSocketAddrs>(&self, addr: A) -> Result<Connecting> {
-        let addr = addr
-            .to_socket_addrs()?
-            .next()
-            .ok_or_else(|| anyhow::anyhow!("no address to connect to"))?;
-
-        self.connect(addr)
-    }
-
-    pub fn connect(&self, addr: SocketAddr) -> Result<Connecting> {
-        self.connect_with_client_config(self.config.client_config().clone(), addr)
+    pub fn connect(&self, address: Address) -> Result<Connecting> {
+        self.connect_with_client_config(self.config.client_config().clone(), address)
     }
 
     pub fn connect_with_expected_public_key(
         &self,
-        addr: SocketAddr,
+        address: Address,
         public_key: ed25519_dalek::PublicKey,
     ) -> Result<Connecting> {
         let config = self
             .config
             .client_config_with_expected_server_identity(public_key);
-        self.connect_with_client_config(config, addr)
+        self.connect_with_client_config(config, address)
     }
 
     fn connect_with_client_config(
         &self,
         config: quinn::ClientConfig,
-        addr: SocketAddr,
+        address: Address,
     ) -> Result<Connecting> {
+        let addr = address.resolve()?;
+
         self.inner
             .connect_with(config, addr, self.config.server_name())
             .map_err(Into::into)
@@ -200,7 +195,7 @@ mod test {
 
         let peer_1 = async move {
             let NewConnection { connection, .. } =
-                endpoint_1.connect(addr_2).unwrap().await.unwrap();
+                endpoint_1.connect(addr_2.into()).unwrap().await.unwrap();
             assert_eq!(connection.peer_identity(), pubkey_2);
             {
                 let mut send_stream = connection.open_uni().await.unwrap();
