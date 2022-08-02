@@ -7,7 +7,7 @@ use crate::{
 use anyhow::anyhow;
 use bytes::Bytes;
 use std::{convert::Infallible, net::SocketAddr, sync::Arc};
-use tower::util::BoxCloneService;
+use tower::{util::BoxCloneService, Service, ServiceExt};
 use tracing::info;
 
 mod connection_manager;
@@ -54,10 +54,12 @@ impl Builder {
         self.keypair(keypair)
     }
 
-    pub fn start(
-        self,
-        service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
-    ) -> Result<Network> {
+    pub fn start<T>(self, service: T) -> Result<Network>
+    where
+        T: Clone + Send + 'static,
+        T: Service<Request<Bytes>, Response = Response<Bytes>, Error = Infallible>,
+        <T as Service<Request<Bytes>>>::Future: Send + 'static,
+    {
         let config = self.config.unwrap_or_default();
         let server_name = self.server_name.unwrap();
         let keypair = self.keypair.unwrap();
@@ -70,6 +72,7 @@ impl Builder {
         let socket = std::net::UdpSocket::bind(self.bind_address)?;
         let (endpoint, incoming) = Endpoint::new(endpoint_config, socket)?;
 
+        let service = service.boxed_clone();
         Ok(Self::network_start(endpoint, incoming, service, config))
     }
 
