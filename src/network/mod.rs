@@ -141,6 +141,15 @@ impl Network {
         self.0.peers()
     }
 
+    pub fn subscribe(
+        &self,
+    ) -> (
+        tokio::sync::broadcast::Receiver<crate::types::PeerEvent>,
+        Vec<PeerId>,
+    ) {
+        self.0.active_peers.subscribe()
+    }
+
     pub fn peer(&self, peer_id: PeerId) -> Option<Peer> {
         self.0.peer(peer_id)
     }
