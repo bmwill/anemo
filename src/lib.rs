@@ -16,20 +16,19 @@ pub use types::{request::Request, response::Response, ConnectionOrigin, PeerId};
 
 #[cfg(test)]
 pub fn init_tracing_for_testing() -> ::tracing::dispatcher::DefaultGuard {
-    let subscriber = tracing_subscriber::FmtSubscriber::builder()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::builder()
-                .with_default_directive(tracing::metadata::LevelFilter::INFO.into())
-                .from_env_lossy(),
-        )
+    use tracing_subscriber::{fmt::format::FmtSpan, EnvFilter, FmtSubscriber};
+
+    let filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info,quinn=warn"));
+
+    let subscriber = FmtSubscriber::builder()
+        .with_env_filter(filter)
         .with_file(true)
         .with_line_number(true)
         .with_target(false)
-        // .with_span_events(
-        //     tracing_subscriber::fmt::format::FmtSpan::NEW
-        //         | tracing_subscriber::fmt::format::FmtSpan::CLOSE,
-        // )
+        .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
         .with_test_writer()
         .finish();
+
     ::tracing::subscriber::set_default(subscriber)
 }
