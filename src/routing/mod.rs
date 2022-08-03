@@ -210,6 +210,16 @@ mod test {
         assert_eq!(response.body(), "hello world!");
     }
 
+    #[tokio::test]
+    async fn route_path_without_starting_slash() {
+        let router = Router::new().route("/echo", echo_service());
+
+        let mut request = Request::new(Bytes::new());
+        *request.route_mut() = "echo".into();
+        let response = router.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::NotFound);
+    }
+
     fn echo_service() -> BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible> {
         let handle = move |request: Request<Bytes>| async move {
             trace!("recieved: {}", request.body().escape_ascii());
