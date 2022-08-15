@@ -7,6 +7,9 @@ use crate::{
     Response,
 };
 
+pub mod codec;
+
+#[derive(Debug)]
 pub struct Status {
     status: StatusCode,
     headers: HeaderMap,
@@ -74,11 +77,12 @@ pub mod client {
     use bytes::{Bytes, BytesMut};
     use tower::Service;
 
-    pub struct Arpc<T> {
+    #[derive(Debug, Clone)]
+    pub struct Rpc<T> {
         inner: T,
     }
 
-    impl<T> Arpc<T> {
+    impl<T> Rpc<T> {
         pub fn new(inner: T) -> Self {
             Self { inner }
         }
@@ -135,7 +139,7 @@ pub mod client {
                 let (parts, body) = response.into_parts();
 
                 let mut decoder = codec.decoder();
-                let message = decoder.decode(body).map_err(Into::into).unwrap().unwrap();
+                let message = decoder.decode(body).map_err(Into::into).unwrap();
 
                 Response::from_parts(parts, message)
             };
@@ -182,62 +186,6 @@ pub mod client {
     }
 }
 
-pub mod codec {
-    use crate::error::BoxError;
-
-    /// Trait that knows how to encode and decode RPC messages.
-    pub trait Codec {
-        const FORMAT_NAME: &'static str;
-
-        /// The encodable message.
-        type Encode: Send + 'static;
-        /// The decodable message.
-        type Decode: Send + 'static;
-
-        /// The encoder that can encode a message.
-        type Encoder: Encoder<Item = Self::Encode> + Send + 'static;
-        /// The encoder that can decode a message.
-        type Decoder: Decoder<Item = Self::Decode> + Send + 'static;
-
-        /// Fetch the encoder.
-        fn encoder(&mut self) -> Self::Encoder;
-        /// Fetch the decoder.
-        fn decoder(&mut self) -> Self::Decoder;
-    }
-
-    /// Encodes RPC message types
-    pub trait Encoder {
-        /// The type that is encoded.
-        type Item;
-
-        /// The type of encoding errors.
-        ///
-        /// The type of unrecoverable frame encoding errors.
-        type Error: Into<BoxError>;
-
-        /// Encodes a message into the provided buffer.
-        fn encode(
-            &mut self,
-            item: Self::Item,
-            dst: &mut bytes::BytesMut,
-        ) -> Result<(), Self::Error>;
-    }
-
-    /// Decodes RPC message types
-    pub trait Decoder {
-        /// The type that is decoded.
-        type Item;
-
-        /// The type of unrecoverable frame decoding errors.
-        type Error: Into<BoxError>;
-
-        /// Decode a message from the buffer.
-        ///
-        /// The buffer will contain exactly the bytes of a full message.
-        fn decode(&mut self, src: bytes::Bytes) -> Result<Option<Self::Item>, Self::Error>;
-    }
-}
-
 pub mod server {
     use bytes::{Bytes, BytesMut};
     use tower::Service;
@@ -250,11 +198,11 @@ pub mod server {
     };
     use std::future::Future;
 
-    pub struct Arpc<T> {
+    pub struct Rpc<T> {
         codec: T,
     }
 
-    impl<T> Arpc<T>
+    impl<T> Rpc<T>
     where
         T: Codec,
     {
@@ -286,7 +234,7 @@ pub mod server {
             let (parts, body) = request.into_parts();
 
             let mut decoder = self.codec.decoder();
-            let message = decoder.decode(body).map_err(Into::into).unwrap().unwrap();
+            let message = decoder.decode(body).map_err(Into::into).unwrap();
 
             let req = Request::from_parts(parts, message);
 

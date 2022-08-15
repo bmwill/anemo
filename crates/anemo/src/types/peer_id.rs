@@ -122,6 +122,6 @@ mod test {
         let num_hex_digits = 2 * num_bytes_to_display;
 
         let short_str = peer_id.short_display(num_bytes_to_display).to_string();
-        assert_eq!(short_str.len(), num_hex_digits.into());
+        assert_eq!(short_str.len(), num_hex_digits as usize);
     }
 }
