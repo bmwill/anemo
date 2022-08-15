@@ -26,8 +26,6 @@ impl Connection {
 
     /// Try to query Cryptographic identity of the peer
     fn try_peer_id(connection: &quinn::Connection) -> Result<PeerId> {
-        use x509_parser::{certificate::X509Certificate, traits::FromDer};
-
         // Query the certificate chain provided by a [TLS
         // Connection](https://docs.rs/rustls/0.20.4/rustls/enum.Connection.html#method.peer_certificates).
         // The first cert in the chain is gaurenteed to be the peer
@@ -37,14 +35,9 @@ impl Connection {
             .downcast::<Vec<rustls::Certificate>>()
             .unwrap()[0];
 
-        let cert = X509Certificate::from_der(peer_cert.0.as_ref())
-            .map_err(|_| rustls::Error::InvalidCertificateEncoding)?;
-        let spki = cert.1.public_key();
-        let key = <ed25519::pkcs8::PublicKeyBytes as pkcs8::DecodePublicKey>::from_public_key_der(
-            spki.raw,
-        )?;
+        let peer_id = crate::crypto::peer_id_from_certificate(peer_cert)?;
 
-        Ok(PeerId(key.to_bytes()))
+        Ok(peer_id)
     }
 
     /// PeerId of the Remote Peer

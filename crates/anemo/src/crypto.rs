@@ -22,35 +22,22 @@ impl rustls::server::ClientCertVerifier for CertVerifier {
         Some(rustls::DistinguishedNames::new())
     }
 
-    // Verifies this is a valid certificate self-signed by the public key we expect(in PSK)
-    // 1. we check the equality of the certificate's public key with the key we expect
-    // 2. we prepare arguments for webpki's certificate verification (following the rustls implementation)
+    // Verifies this is a valid ed25519 self-signed certificate
+    // 1. we prepare arguments for webpki's certificate verification (following the rustls implementation)
     //    placing the public key at the root of the certificate chain (as it should be for a self-signed certificate)
-    // 3. we call webpki's certificate verification
+    // 2. we call webpki's certificate verification
     fn verify_client_cert(
         &self,
         end_entity: &rustls::Certificate,
         intermediates: &[rustls::Certificate],
         now: std::time::SystemTime,
     ) -> Result<rustls::server::ClientCertVerified, rustls::Error> {
-        // Step 1: Check this matches the key we expect
-        // let cert = X509Certificate::from_der(&end_entity.0[..])
-        //     .map_err(|_| rustls::Error::InvalidCertificateEncoding)?;
-        // let spki = cert.1.public_key().clone();
-        // if &spki != self.borrow_spki() {
-        //     return Err(rustls::Error::InvalidCertificateData(format!(
-        //         "invalid peer certificate: received {:?} instead of expected {:?}",
-        //         spki,
-        //         self.borrow_spki()
-        //     )));
-        // }
-
         // We now check we're receiving correctly signed data with the expected key
-        // Step 2: prepare arguments
+        // Step 1: prepare arguments
         let (cert, chain, trustroots) = prepare_for_self_signed(end_entity, intermediates)?;
         let now = webpki::Time::try_from(now).map_err(|_| rustls::Error::FailedToGetCurrentTime)?;
 
-        // Step 3: call verification from webpki
+        // Step 2: call verification from webpki
         let cert = cert
             .verify_is_valid_tls_client_cert(
                 SUPPORTED_SIG_ALGS,
@@ -71,11 +58,10 @@ impl rustls::server::ClientCertVerifier for CertVerifier {
 }
 
 impl rustls::client::ServerCertVerifier for CertVerifier {
-    // Verifies this is a valid certificate self-signed by the public key we expect(in PSK)
-    // 1. we check the equality of the certificate's public key with the key we expect
-    // 2. we prepare arguments for webpki's certificate verification (following the rustls implementation)
+    // Verifies this is a valid ed25519 self-signed certificate
+    // 1. we prepare arguments for webpki's certificate verification (following the rustls implementation)
     //    placing the public key at the root of the certificate chain (as it should be for a self-signed certificate)
-    // 3. we call webpki's certificate verification
+    // 2. we call webpki's certificate verification
     fn verify_server_cert(
         &self,
         end_entity: &rustls::Certificate,
@@ -85,20 +71,8 @@ impl rustls::client::ServerCertVerifier for CertVerifier {
         _ocsp_response: &[u8],
         now: std::time::SystemTime,
     ) -> Result<rustls::client::ServerCertVerified, rustls::Error> {
-        // Step 1: Check this matches the key we expect
-        // let cert = X509Certificate::from_der(&end_entity.0[..])
-        //     .map_err(|_| rustls::Error::InvalidCertificateEncoding)?;
-        // let spki = cert.1.public_key().clone();
-        // if &spki != self.borrow_spki() {
-        //     return Err(rustls::Error::InvalidCertificateData(format!(
-        //         "invalid peer certificate: received {:?} instead of expected {:?}",
-        //         spki,
-        //         self.borrow_spki()
-        //     )));
-        // }
-
         // Then we check this is actually a valid self-signed certificate with matching name
-        // Step 2: prepare arguments
+        // Step 1: prepare arguments
         let (cert, chain, trustroots) = prepare_for_self_signed(end_entity, intermediates)?;
         let webpki_now =
             webpki::Time::try_from(now).map_err(|_| rustls::Error::FailedToGetCurrentTime)?;
@@ -116,7 +90,7 @@ impl rustls::client::ServerCertVerifier for CertVerifier {
             return Err(rustls::Error::UnsupportedNameType);
         }
 
-        // Step 3: call verification from webpki
+        // Step 2: call verification from webpki
         let cert = cert
             .verify_is_valid_tls_server_cert(
                 SUPPORTED_SIG_ALGS,
@@ -151,26 +125,17 @@ impl rustls::client::ServerCertVerifier for ExpectedCertVerifier {
         ocsp_response: &[u8],
         now: std::time::SystemTime,
     ) -> Result<rustls::client::ServerCertVerified, rustls::Error> {
-        use x509_parser::{certificate::X509Certificate, traits::FromDer};
-
         // Step 1: Check this matches the key we expect
-        let cert = X509Certificate::from_der(&end_entity.0[..])
-            .map_err(|_| rustls::Error::InvalidCertificateEncoding)?;
-        let spki = cert.1.public_key();
-        let key = <ed25519::pkcs8::PublicKeyBytes as pkcs8::DecodePublicKey>::from_public_key_der(
-            spki.raw,
-        )
-        .map_err(|e| {
-            rustls::Error::InvalidCertificateData(format!("invalid ed25519 public key: {e}"))
-        })?;
-        let peer_id = PeerId(key.to_bytes());
+        let peer_id = peer_id_from_certificate(end_entity)?;
+
         if peer_id != self.1 {
             return Err(rustls::Error::InvalidCertificateData(format!(
                 "invalid peer certificate: received {:?} instead of expected {:?}",
-                key, self.1,
+                peer_id, self.1,
             )));
         }
 
+        // Delegate steps 2 and 3 to CertVerifier's impl
         self.0.verify_server_cert(
             end_entity,
             intermediates,
@@ -215,4 +180,23 @@ fn pki_error(error: webpki::Error) -> rustls::Error {
         }
         e => rustls::Error::InvalidCertificateData(format!("invalid peer certificate: {e}")),
     }
+}
+
+pub(crate) fn peer_id_from_certificate(
+    certificate: &rustls::Certificate,
+) -> Result<PeerId, rustls::Error> {
+    use x509_parser::{certificate::X509Certificate, traits::FromDer};
+
+    let cert = X509Certificate::from_der(certificate.0.as_ref())
+        .map_err(|_| rustls::Error::InvalidCertificateEncoding)?;
+    let spki = cert.1.public_key();
+    let public_key_bytes =
+        <ed25519::pkcs8::PublicKeyBytes as pkcs8::DecodePublicKey>::from_public_key_der(spki.raw)
+            .map_err(|e| {
+            rustls::Error::InvalidCertificateData(format!("invalid ed25519 public key: {e}"))
+        })?;
+
+    let peer_id = PeerId(public_key_bytes.to_bytes());
+
+    Ok(peer_id)
 }
