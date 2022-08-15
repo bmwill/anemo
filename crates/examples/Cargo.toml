@@ -1,0 +1,18 @@
+[package]
+name = "examples"
+version = "0.0.0"
+license = "Apache-2.0 OR MIT"
+authors = [ "Brandon Williams <bwilliamseng@gmail.com>" ]
+description = "a peer-to-peer networking library"
+edition = "2021"
+
+[dependencies]
+serde = { version = "1.0.142", features = ["derive"] }
+anemo = { path = "../anemo" }
+tokio = { version = "1.20.1", features = ["full"] }
+futures = "0.3.21"
+rand = "0.7.3"
+ed25519-dalek = "1.0.1"
+
+[build-dependencies]
+anemo-build = { path = "../anemo-build" }
