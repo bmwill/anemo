@@ -3,7 +3,7 @@ use crate::{
     config::Config,
     connection::Connection,
     endpoint::{Connecting, Endpoint, Incoming, NewConnection},
-    types::{PeerInfo, Address},
+    types::{Address, PeerInfo},
     ConnectionOrigin, PeerId, Request, Response, Result,
 };
 use bytes::Bytes;
@@ -21,7 +21,11 @@ use tracing::{error, info, instrument};
 
 #[derive(Debug)]
 pub enum ConnectionManagerRequest {
-    ConnectRequest(Address, Option<PeerId>, tokio::sync::oneshot::Sender<Result<PeerId>>),
+    ConnectRequest(
+        Address,
+        Option<PeerId>,
+        tokio::sync::oneshot::Sender<Result<PeerId>>,
+    ),
 }
 
 struct ConnectingOutput {
@@ -289,7 +293,8 @@ impl ConnectionManager {
         oneshot: tokio::sync::oneshot::Sender<Result<PeerId>>,
     ) {
         let connecting = if let Some(peer_id) = peer_id {
-            self.endpoint.connect_with_expected_public_key(address, peer_id.0)
+            self.endpoint
+                .connect_with_expected_peer_id(address, peer_id)
         } else {
             self.endpoint.connect(address)
         };

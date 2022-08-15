@@ -6,7 +6,7 @@ use tracing::trace;
 #[derive(Clone)]
 pub struct Connection {
     inner: quinn::Connection,
-    peer_identity: ed25519_dalek::PublicKey,
+    peer_id: PeerId,
     origin: ConnectionOrigin,
 
     // Time that the connection was established
@@ -15,17 +15,17 @@ pub struct Connection {
 
 impl Connection {
     pub fn new(inner: quinn::Connection, origin: ConnectionOrigin) -> Result<Self> {
-        let peer_identity = Self::try_peer_identity(&inner)?;
+        let peer_id = Self::try_peer_id(&inner)?;
         Ok(Self {
             inner,
-            peer_identity,
+            peer_id,
             origin,
             time_established: std::time::Instant::now(),
         })
     }
 
     /// Try to query Cryptographic identity of the peer
-    fn try_peer_identity(connection: &quinn::Connection) -> Result<ed25519_dalek::PublicKey> {
+    fn try_peer_id(connection: &quinn::Connection) -> Result<PeerId> {
         use x509_parser::{certificate::X509Certificate, traits::FromDer};
 
         // Query the certificate chain provided by a [TLS
@@ -40,18 +40,16 @@ impl Connection {
         let cert = X509Certificate::from_der(peer_cert.0.as_ref())
             .map_err(|_| rustls::Error::InvalidCertificateEncoding)?;
         let spki = cert.1.public_key();
-        let key = ed25519_dalek::PublicKey::from_bytes(spki.subject_public_key.data).unwrap();
-        Ok(key)
-    }
+        let key = <ed25519::pkcs8::PublicKeyBytes as pkcs8::DecodePublicKey>::from_public_key_der(
+            spki.raw,
+        )?;
 
-    /// Cryptographic identity of the peer
-    pub fn peer_identity(&self) -> ed25519_dalek::PublicKey {
-        self.peer_identity
+        Ok(PeerId(key.to_bytes()))
     }
 
     /// PeerId of the Remote Peer
     pub fn peer_id(&self) -> PeerId {
-        PeerId(self.peer_identity)
+        self.peer_id
     }
 
     /// Origin of the Connection
@@ -123,7 +121,7 @@ impl fmt::Debug for Connection {
             .field("origin", &self.origin())
             .field("id", &self.stable_id())
             .field("remote_address", &self.remote_address())
-            .field("peer_identity", &self.peer_identity())
+            .field("peer_id", &self.peer_id())
             .finish_non_exhaustive()
     }
 }

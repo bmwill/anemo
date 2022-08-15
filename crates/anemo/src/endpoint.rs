@@ -48,14 +48,14 @@ impl Endpoint {
         self.connect_with_client_config(self.config.client_config().clone(), address)
     }
 
-    pub fn connect_with_expected_public_key(
+    pub fn connect_with_expected_peer_id(
         &self,
         address: Address,
-        public_key: ed25519_dalek::PublicKey,
+        peer_id: PeerId,
     ) -> Result<Connecting> {
         let config = self
             .config
-            .client_config_with_expected_server_identity(public_key);
+            .client_config_with_expected_server_identity(peer_id);
         self.connect_with_client_config(config, address)
     }
 
@@ -78,7 +78,7 @@ impl Endpoint {
     }
 
     pub fn peer_id(&self) -> PeerId {
-        PeerId(self.config().keypair().public)
+        PeerId(self.config().keypair().public.to_bytes())
     }
 
     pub fn config(&self) -> &EndpointConfig {
@@ -196,7 +196,7 @@ mod test {
         let peer_1 = async move {
             let NewConnection { connection, .. } =
                 endpoint_1.connect(addr_2.into()).unwrap().await.unwrap();
-            assert_eq!(connection.peer_identity(), pubkey_2);
+            assert_eq!(connection.peer_id().0, pubkey_2.to_bytes());
             {
                 let mut send_stream = connection.open_uni().await.unwrap();
                 send_stream.write_all(msg).await.unwrap();
@@ -213,7 +213,7 @@ mod test {
                 mut uni_streams,
                 ..
             } = incoming_2.next().await.unwrap().await.unwrap();
-            assert_eq!(connection.peer_identity(), pubkey_1);
+            assert_eq!(connection.peer_id().0, pubkey_1.to_bytes());
 
             let mut recv = uni_streams.next().await.unwrap().unwrap();
             let mut buf = Vec::new();

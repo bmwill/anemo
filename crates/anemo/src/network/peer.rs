@@ -24,8 +24,8 @@ impl<'network> Peer<'network> {
         }
     }
 
-    pub fn peer_identity(&self) -> PeerId {
-        PeerId(self.connection.peer_identity())
+    pub fn peer_id(&self) -> PeerId {
+        self.connection.peer_id()
     }
 
     pub async fn rpc(&self, request: Request<Bytes>) -> Result<Response<Bytes>> {
@@ -47,7 +47,7 @@ impl<'network> Peer<'network> {
         let mut response = read_response(&mut recv_stream).await?;
 
         // Set the PeerId of this peer
-        response.extensions_mut().insert(self.peer_identity());
+        response.extensions_mut().insert(self.peer_id());
 
         Ok(response)
     }

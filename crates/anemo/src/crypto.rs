@@ -1,3 +1,5 @@
+use crate::PeerId;
+
 static SUPPORTED_SIG_ALGS: &[&webpki::SignatureAlgorithm] = &[&webpki::ED25519];
 
 #[derive(Clone, Debug)]
@@ -132,10 +134,7 @@ impl rustls::client::ServerCertVerifier for CertVerifier {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct ExpectedCertVerifier(
-    pub(crate) CertVerifier,
-    pub(crate) ed25519_dalek::PublicKey,
-);
+pub(crate) struct ExpectedCertVerifier(pub(crate) CertVerifier, pub(crate) PeerId);
 
 impl rustls::client::ServerCertVerifier for ExpectedCertVerifier {
     // Verifies this is a valid certificate self-signed by the public key we expect(in PSK)
@@ -158,11 +157,14 @@ impl rustls::client::ServerCertVerifier for ExpectedCertVerifier {
         let cert = X509Certificate::from_der(&end_entity.0[..])
             .map_err(|_| rustls::Error::InvalidCertificateEncoding)?;
         let spki = cert.1.public_key();
-        let key =
-            ed25519_dalek::PublicKey::from_bytes(spki.subject_public_key.data).map_err(|e| {
-                rustls::Error::InvalidCertificateData(format!("invalid ed25519 public key: {e}"))
-            })?;
-        if key != self.1 {
+        let key = <ed25519::pkcs8::PublicKeyBytes as pkcs8::DecodePublicKey>::from_public_key_der(
+            spki.raw,
+        )
+        .map_err(|e| {
+            rustls::Error::InvalidCertificateData(format!("invalid ed25519 public key: {e}"))
+        })?;
+        let peer_id = PeerId(key.to_bytes());
+        if peer_id != self.1 {
             return Err(rustls::Error::InvalidCertificateData(format!(
                 "invalid peer certificate: received {:?} instead of expected {:?}",
                 key, self.1,

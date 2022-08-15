@@ -1,6 +1,6 @@
 use crate::{
     crypto::{CertVerifier, ExpectedCertVerifier},
-    Result,
+    PeerId, Result,
 };
 use pkcs8::EncodePrivateKey;
 // use ed25519::pkcs8::EncodePrivateKey;
@@ -302,10 +302,10 @@ impl EndpointConfig {
 
     pub fn client_config_with_expected_server_identity(
         &self,
-        pubkey: ed25519_dalek::PublicKey,
+        peer_id: PeerId,
     ) -> quinn::ClientConfig {
         let server_cert_verifier =
-            ExpectedCertVerifier(CertVerifier(self.server_name().into()), pubkey);
+            ExpectedCertVerifier(CertVerifier(self.server_name().into()), peer_id);
         let client_crypto = rustls::ClientConfig::builder()
             .with_safe_defaults()
             .with_custom_certificate_verifier(Arc::new(server_cert_verifier))
