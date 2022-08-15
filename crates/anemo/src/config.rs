@@ -208,9 +208,9 @@ impl EndpointConfigBuilder {
         )?;
 
         Ok(EndpointConfig {
+            peer_id: PeerId(keypair.public.to_bytes()),
             certificate,
             pkcs8_der,
-            keypair,
             quinn_server_config: server_config,
             quinn_client_config: client_config,
             server_name,
@@ -263,9 +263,9 @@ impl EndpointConfigBuilder {
 
 #[derive(Debug)]
 pub struct EndpointConfig {
+    peer_id: PeerId,
     certificate: rustls::Certificate,
     pkcs8_der: rustls::PrivateKey,
-    keypair: ed25519_dalek::Keypair,
     quinn_server_config: quinn::ServerConfig,
     quinn_client_config: quinn::ClientConfig,
 
@@ -284,8 +284,8 @@ impl EndpointConfig {
         EndpointConfigBuilder::new()
     }
 
-    pub fn keypair(&self) -> &ed25519_dalek::Keypair {
-        &self.keypair
+    pub fn peer_id(&self) -> PeerId {
+        self.peer_id
     }
 
     pub fn server_name(&self) -> &str {

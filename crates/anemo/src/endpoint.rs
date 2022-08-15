@@ -78,7 +78,7 @@ impl Endpoint {
     }
 
     pub fn peer_id(&self) -> PeerId {
-        PeerId(self.config().keypair().public.to_bytes())
+        self.config().peer_id()
     }
 
     pub fn config(&self) -> &EndpointConfig {
@@ -183,20 +183,20 @@ mod test {
         let msg = b"hello";
         let config_1 = EndpointConfig::random("test");
         let (endpoint_1, _incoming_1) = Endpoint::new_with_address(config_1, "localhost:0")?;
-        let pubkey_1 = endpoint_1.config.keypair().public;
+        let peer_id_1 = endpoint_1.config.peer_id();
 
         println!("1: {}", endpoint_1.local_addr());
 
         let config_2 = EndpointConfig::random("test");
         let (endpoint_2, mut incoming_2) = Endpoint::new_with_address(config_2, "localhost:0")?;
-        let pubkey_2 = endpoint_2.config.keypair().public;
+        let peer_id_2 = endpoint_2.config.peer_id();
         let addr_2 = endpoint_2.local_addr();
         println!("2: {}", endpoint_2.local_addr());
 
         let peer_1 = async move {
             let NewConnection { connection, .. } =
                 endpoint_1.connect(addr_2.into()).unwrap().await.unwrap();
-            assert_eq!(connection.peer_id().0, pubkey_2.to_bytes());
+            assert_eq!(connection.peer_id(), peer_id_2);
             {
                 let mut send_stream = connection.open_uni().await.unwrap();
                 send_stream.write_all(msg).await.unwrap();
@@ -213,7 +213,7 @@ mod test {
                 mut uni_streams,
                 ..
             } = incoming_2.next().await.unwrap().await.unwrap();
-            assert_eq!(connection.peer_id().0, pubkey_1.to_bytes());
+            assert_eq!(connection.peer_id(), peer_id_1);
 
             let mut recv = uni_streams.next().await.unwrap().unwrap();
             let mut buf = Vec::new();
