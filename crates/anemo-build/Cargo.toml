@@ -1,0 +1,13 @@
+[package]
+name = "anemo-build"
+version = "0.0.0"
+license = "Apache-2.0 OR MIT"
+authors = [ "Brandon Williams <bwilliamseng@gmail.com>" ]
+description = "a peer-to-peer networking library"
+edition = "2021"
+
+[dependencies]
+prettyplease = "0.1"
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = "1.0"

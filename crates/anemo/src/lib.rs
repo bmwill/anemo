@@ -14,6 +14,22 @@ pub use network::{KnownPeers, Network, Peer};
 pub use routing::Router;
 pub use types::{request::Request, response::Response, ConnectionOrigin, PeerId};
 
+#[doc(hidden)]
+pub mod codegen {
+    pub use super::error::BoxError;
+    pub use super::types::response::IntoResponse;
+    pub use super::Request;
+    pub use super::Response;
+    pub use async_trait::async_trait;
+    pub use bytes::Bytes;
+    pub use futures::future::BoxFuture;
+    pub use std::future::Future;
+    pub use std::pin::Pin;
+    pub use std::sync::Arc;
+    pub use std::task::{Context, Poll};
+    pub use tower::Service;
+}
+
 #[cfg(test)]
 pub fn init_tracing_for_testing() -> ::tracing::dispatcher::DefaultGuard {
     use tracing_subscriber::{fmt::format::FmtSpan, EnvFilter, FmtSubscriber};
