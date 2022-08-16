@@ -233,7 +233,8 @@ impl EndpointConfigBuilder {
     ) -> (rustls::Certificate, rustls::PrivateKey) {
         let pkcs8 = keypair.to_pkcs8_der().unwrap();
         let key_der = rustls::PrivateKey(pkcs8.as_bytes().to_vec());
-        let certificate = keypair_to_certificate(vec![server_name.to_owned()], keypair).unwrap();
+        let certificate =
+            private_key_to_certificate(vec![server_name.to_owned()], &key_der).unwrap();
         (certificate, key_der)
     }
 
@@ -336,24 +337,14 @@ impl EndpointConfig {
     }
 }
 
-fn keypair_to_certificate(
+fn private_key_to_certificate(
     subject_names: impl Into<Vec<String>>,
-    keypair: &ed25519::KeypairBytes,
+    private_key: &rustls::PrivateKey,
 ) -> Result<rustls::Certificate, anyhow::Error> {
-    let (pkcs_bytes, alg) = keypair_bytes_to_pkcs8_n_algo(keypair).map_err(anyhow::Error::new)?;
+    let alg = &rcgen::PKCS_ED25519;
 
-    let certificate = gen_certificate(subject_names, (pkcs_bytes.as_bytes(), alg))?;
+    let certificate = gen_certificate(subject_names, (private_key.0.as_ref(), alg))?;
     Ok(certificate)
-}
-
-fn keypair_bytes_to_pkcs8_n_algo(
-    kpb: &ed25519::KeypairBytes,
-) -> Result<(pkcs8::der::SecretDocument, &'static SignatureAlgorithm), pkcs8::Error> {
-    // PKCS#8 v2 as described in [RFC 5958].
-    // PKCS#8 v2 keys include an additional public key field.
-    let pkcs8 = kpb.to_pkcs8_der()?;
-
-    Ok((pkcs8, &rcgen::PKCS_ED25519))
 }
 
 fn gen_certificate(
