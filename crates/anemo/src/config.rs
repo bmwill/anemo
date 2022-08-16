@@ -145,7 +145,8 @@ impl QuicConfig {
 
 #[derive(Debug, Default)]
 pub struct EndpointConfigBuilder {
-    pub keypair: Option<ed25519_dalek::Keypair>,
+    /// Ed25519 Private Key
+    pub private_key: Option<[u8; 32]>,
 
     // TODO Maybe use server name to identify the network name?
     //
@@ -172,22 +173,28 @@ impl EndpointConfigBuilder {
         self
     }
 
-    pub fn keypair(mut self, keypair: ed25519_dalek::Keypair) -> Self {
-        self.keypair = Some(keypair);
+    pub fn private_key(mut self, private_key: [u8; 32]) -> Self {
+        self.private_key = Some(private_key);
         self
     }
 
     #[cfg(test)]
-    pub(crate) fn random_keypair(mut self) -> Self {
+    pub(crate) fn random_private_key(self) -> Self {
         let mut rng = rand::thread_rng();
-        let keypair = ed25519_dalek::Keypair::generate(&mut rng);
-        self.keypair = Some(keypair);
+        let mut bytes = [0u8; 32];
+        rand::RngCore::fill_bytes(&mut rng, &mut bytes[..]);
 
-        self
+        self.private_key(bytes)
     }
 
     pub fn build(self) -> Result<EndpointConfig> {
-        let keypair = self.keypair.unwrap();
+        let keypair = ed25519::KeypairBytes {
+            secret_key: self.private_key.unwrap(),
+            // ring cannot handle the optional public key that would be legal der here
+            // that is, ring expects PKCS#8 v.1
+            public_key: None,
+        };
+
         let server_name = self.server_name.unwrap();
         let transport_config = Arc::new(self.transport_config.unwrap_or_default());
 
@@ -207,8 +214,10 @@ impl EndpointConfigBuilder {
             transport_config.clone(),
         )?;
 
+        let peer_id = crate::crypto::peer_id_from_certificate(&certificate).unwrap();
+
         Ok(EndpointConfig {
-            peer_id: PeerId(keypair.public.to_bytes()),
+            peer_id,
             certificate,
             pkcs8_der,
             quinn_server_config: server_config,
@@ -219,11 +228,11 @@ impl EndpointConfigBuilder {
     }
 
     fn generate_cert(
-        keypair: &ed25519_dalek::Keypair,
+        keypair: &ed25519::KeypairBytes,
         server_name: &str,
     ) -> (rustls::Certificate, rustls::PrivateKey) {
-        let key_der = rustls::PrivateKey(keypair.to_pkcs8_bytes());
-        let keypair = ed25519_dalek::Keypair::from_bytes(&keypair.to_bytes()).unwrap();
+        let pkcs8 = keypair.to_pkcs8_der().unwrap();
+        let key_der = rustls::PrivateKey(pkcs8.as_bytes().to_vec());
         let certificate = keypair_to_certificate(vec![server_name.to_owned()], keypair).unwrap();
         (certificate, key_der)
     }
@@ -320,58 +329,25 @@ impl EndpointConfig {
     #[cfg(test)]
     pub(crate) fn random(server_name: &str) -> Self {
         Self::builder()
-            .random_keypair()
+            .random_private_key()
             .server_name(server_name)
             .build()
             .unwrap()
     }
 }
 
-/// This type provides serialized bytes for a private key.
-///
-/// The private key must be DER-encoded ASN.1 in either
-/// PKCS#8 or PKCS#1 format.
-trait ToPKCS8 {
-    fn to_pkcs8_bytes(&self) -> Vec<u8>;
-}
-
-impl ToPKCS8 for ed25519_dalek::Keypair {
-    fn to_pkcs8_bytes(&self) -> Vec<u8> {
-        let kpb = ed25519::KeypairBytes {
-            secret_key: self.secret.to_bytes(),
-            public_key: None,
-        };
-        let pkcs8 = kpb.to_pkcs8_der().unwrap();
-        pkcs8.as_bytes().to_vec()
-    }
-}
-
 fn keypair_to_certificate(
     subject_names: impl Into<Vec<String>>,
-    kp: ed25519_dalek::Keypair,
+    keypair: &ed25519::KeypairBytes,
 ) -> Result<rustls::Certificate, anyhow::Error> {
-    let keypair_bytes = dalek_to_keypair_bytes(kp);
-    let (pkcs_bytes, alg) =
-        keypair_bytes_to_pkcs8_n_algo(keypair_bytes).map_err(anyhow::Error::new)?;
+    let (pkcs_bytes, alg) = keypair_bytes_to_pkcs8_n_algo(keypair).map_err(anyhow::Error::new)?;
 
     let certificate = gen_certificate(subject_names, (pkcs_bytes.as_bytes(), alg))?;
     Ok(certificate)
 }
 
-fn dalek_to_keypair_bytes(dalek_kp: ed25519_dalek::Keypair) -> ed25519::KeypairBytes {
-    let private = dalek_kp.secret;
-    let _public = dalek_kp.public;
-
-    ed25519::KeypairBytes {
-        secret_key: private.to_bytes(),
-        // ring cannot handle the optional public key that would be legal der here
-        // that is, ring expects PKCS#8 v.1
-        public_key: None, // Some(_public.to_bytes()),
-    }
-}
-
 fn keypair_bytes_to_pkcs8_n_algo(
-    kpb: ed25519::KeypairBytes,
+    kpb: &ed25519::KeypairBytes,
 ) -> Result<(pkcs8::der::SecretDocument, &'static SignatureAlgorithm), pkcs8::Error> {
     // PKCS#8 v2 as described in [RFC 5958].
     // PKCS#8 v2 keys include an additional public key field.

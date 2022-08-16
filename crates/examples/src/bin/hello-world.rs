@@ -48,13 +48,13 @@ impl Greeter for MyGreeter {
 async fn main() {
     let mut rng = rand::thread_rng();
     let network_1 = Network::bind("localhost:0")
-        .keypair(ed25519_dalek::Keypair::generate(&mut rng))
+        .private_key(ed25519_dalek::Keypair::generate(&mut rng).secret.to_bytes())
         .server_name("test")
         .start(GreeterServer::new(MyGreeter::default()))
         .unwrap();
 
     let network_2 = Network::bind("localhost:0")
-        .keypair(ed25519_dalek::Keypair::generate(&mut rng))
+        .private_key(ed25519_dalek::Keypair::generate(&mut rng).secret.to_bytes())
         .server_name("test")
         .start(GreeterServer::new(MyGreeter::default()))
         .unwrap();

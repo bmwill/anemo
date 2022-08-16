@@ -93,9 +93,7 @@ mod test {
 
     #[test]
     fn short_peer_id() {
-        let mut rng = rand::thread_rng();
-        let keypair = ed25519_dalek::Keypair::generate(&mut rng);
-        let peer_id = PeerId(keypair.public.to_bytes());
+        let peer_id = PeerId([42; 32]);
 
         let num_bytes_to_display = 4;
         let num_hex_digits = 2 * num_bytes_to_display;

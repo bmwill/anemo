@@ -106,7 +106,7 @@ fn build_network() -> Result<Network> {
 
 fn build_network_with_addr(addr: &str) -> Result<Network> {
     let network = Network::bind(addr)
-        .random_keypair()
+        .random_private_key()
         .server_name("test")
         .start(echo_service())?;
 

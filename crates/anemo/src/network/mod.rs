@@ -27,7 +27,9 @@ pub struct Builder {
     bind_address: Address,
     config: Option<Config>,
     server_name: Option<String>,
-    keypair: Option<ed25519_dalek::Keypair>,
+
+    /// Ed25519 Private Key
+    private_key: Option<[u8; 32]>,
 }
 
 impl Builder {
@@ -41,17 +43,18 @@ impl Builder {
         self
     }
 
-    pub fn keypair(mut self, keypair: ed25519_dalek::Keypair) -> Self {
-        self.keypair = Some(keypair);
+    pub fn private_key(mut self, private_key: [u8; 32]) -> Self {
+        self.private_key = Some(private_key);
         self
     }
 
     #[cfg(test)]
-    pub(crate) fn random_keypair(self) -> Self {
+    pub(crate) fn random_private_key(self) -> Self {
         let mut rng = rand::thread_rng();
-        let keypair = ed25519_dalek::Keypair::generate(&mut rng);
+        let mut bytes = [0u8; 32];
+        rand::RngCore::fill_bytes(&mut rng, &mut bytes[..]);
 
-        self.keypair(keypair)
+        self.private_key(bytes)
     }
 
     pub fn start<T>(self, service: T) -> Result<Network>
@@ -62,12 +65,12 @@ impl Builder {
     {
         let config = self.config.unwrap_or_default();
         let server_name = self.server_name.unwrap();
-        let keypair = self.keypair.unwrap();
+        let private_key = self.private_key.unwrap();
 
         let endpoint_config = EndpointConfig::builder()
             .transport_config(config.transport_config())
             .server_name(server_name)
-            .keypair(keypair)
+            .private_key(private_key)
             .build()?;
         let socket = std::net::UdpSocket::bind(self.bind_address)?;
         let (endpoint, incoming) = Endpoint::new(endpoint_config, socket)?;
@@ -133,7 +136,7 @@ impl Network {
             bind_address: addr.into(),
             config: None,
             server_name: None,
-            keypair: None,
+            private_key: None,
         }
     }
 
