@@ -121,13 +121,17 @@ pub mod client {
                 encoder
                     .encode(body, &mut bytes)
                     .map_err(Into::into)
-                    .unwrap();
+                    .map_err(Status::from_error)?;
 
                 Request::from_parts(parts, bytes.freeze())
             };
 
-            let response = self.inner.call(request).await.map_err(Into::into).unwrap();
-            // .map_err(|err| Status::from_error(err.into()))?;
+            let response = self
+                .inner
+                .call(request)
+                .await
+                .map_err(Into::into)
+                .map_err(Status::from_error)?;
 
             let status_code = response.status();
 
@@ -139,50 +143,16 @@ pub mod client {
                 let (parts, body) = response.into_parts();
 
                 let mut decoder = codec.decoder();
-                let message = decoder.decode(body).map_err(Into::into).unwrap();
+                let message = decoder
+                    .decode(body)
+                    .map_err(Into::into)
+                    .map_err(Status::from_error)?;
 
                 Response::from_parts(parts, message)
             };
 
             Ok(response)
         }
-
-        // async fn map_response(
-        //     &mut self,
-        //     response: Response<Bytes>,
-        // ) -> Result<Response<T::Decode>, Status> {
-        //     let (parts, body) = request.into_parts();
-
-        //     let mut decoder = self.codec.decoder();
-        //     let message = decoder.decode(body).unwrap().unwrap();
-
-        //     let req = Request::from_parts(parts, message);
-
-        //     Ok(req)
-        // }
-
-        // fn map_request<C>(
-        //     &mut self,
-        //     codec: C,
-        //     request: Request<C::Encode>,
-        // ) -> Result<Request<Bytes>, Status>
-        // where
-        //     C: Codec,
-        // {
-        //     let (parts, body) = request.into_parts();
-
-        //     // Set the content type
-        //     // parts.headers.insert(
-        //     //     http::header::CONTENT_TYPE,
-        //     //     http::header::HeaderValue::from_static("application/grpc"),
-        //     // );
-
-        //     let mut bytes = BytesMut::new();
-        //     let mut encoder = codec.encoder();
-        //     encoder.encode(body, &mut bytes).unwrap();
-
-        //     Ok(Request::from_parts(parts, bytes.freeze()))
-        // }
     }
 }
 
@@ -234,7 +204,10 @@ pub mod server {
             let (parts, body) = request.into_parts();
 
             let mut decoder = self.codec.decoder();
-            let message = decoder.decode(body).map_err(Into::into).unwrap();
+            let message = decoder
+                .decode(body)
+                .map_err(Into::into)
+                .map_err(Status::from_error)?;
 
             let req = Request::from_parts(parts, message);
 
@@ -260,11 +233,14 @@ pub mod server {
 
             let mut bytes = BytesMut::new();
             let mut encoder = self.codec.encoder();
-            encoder
+
+            if let Err(status) = encoder
                 .encode(body, &mut bytes)
                 .map_err(Into::into)
-                // .map_err(|err| Status::internal(format!("Error encoding: {}", err)))
-                .unwrap();
+                .map_err(|err| Status::internal(format!("Error encoding: {err}")))
+            {
+                return status.into_response();
+            }
 
             Response::from_parts(parts, bytes.freeze())
         }
