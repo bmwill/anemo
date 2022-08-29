@@ -239,3 +239,61 @@ async fn basic_connectivity_check() -> Result<()> {
 
     Ok(())
 }
+
+// Ensure that when all Network handles are dropped that the network is shutdown
+#[tokio::test]
+async fn drop_shutdown() -> Result<()> {
+    use tokio::sync::mpsc::error::TryRecvError;
+
+    let _gaurd = crate::init_tracing_for_testing();
+
+    let (sender, mut reciever) = tokio::sync::mpsc::channel::<()>(1);
+
+    let service = {
+        let handle = move |request: Request<Bytes>| {
+            let sender = sender.clone();
+            async move {
+                let _sender = sender;
+                let response = Response::new(request.into_body());
+                Result::<Response<Bytes>, Infallible>::Ok(response)
+            }
+        };
+
+        tower::service_fn(handle)
+    };
+
+    let network = Network::bind("localhost:0")
+        .random_private_key()
+        .server_name("test")
+        .start(service)?;
+
+    let network_2 = build_network()?;
+
+    let peer = network_2.connect(network.local_addr()).await?;
+    let _response = network_2.rpc(peer, Request::new(Bytes::new())).await?;
+
+    assert_eq!(Err(TryRecvError::Empty), reciever.try_recv());
+
+    let network_ref = network.downgrade();
+
+    // Just check to see if upgrade is successful
+    assert!(network_ref.upgrade().is_some());
+
+    drop(network);
+
+    // Now network upgrading should fail
+    assert!(network_ref.upgrade().is_none());
+
+    // And the network should eventually be completely stopped
+    assert_eq!(None, reciever.recv().await);
+    assert_eq!(Err(TryRecvError::Disconnected), reciever.try_recv());
+
+    let err = network_2
+        .rpc(peer, Request::new(Bytes::new()))
+        .await
+        .unwrap_err();
+
+    tracing::info!("err: {err}");
+
+    Ok(())
+}

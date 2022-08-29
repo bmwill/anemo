@@ -189,6 +189,11 @@ impl Network {
     pub fn peer_id(&self) -> PeerId {
         self.0.peer_id()
     }
+
+    #[cfg(test)]
+    pub(crate) fn downgrade(&self) -> NetworkRef {
+        NetworkRef(Arc::downgrade(&self.0))
+    }
 }
 
 struct NetworkInner {
@@ -252,4 +257,16 @@ impl NetworkInner {
     //         .message(message)
     //         .await
     // }
+}
+
+// TODO look into providing `NetworkRef` via extention to request handlers
+#[derive(Clone)]
+#[cfg(test)]
+pub(crate) struct NetworkRef(std::sync::Weak<NetworkInner>);
+
+#[cfg(test)]
+impl NetworkRef {
+    pub fn upgrade(&self) -> Option<Network> {
+        self.0.upgrade().map(Network)
+    }
 }
