@@ -6,22 +6,17 @@ use crate::{
 };
 use bytes::Bytes;
 use futures::future::BoxFuture;
-use std::marker::PhantomData;
 use tokio_util::codec::{FramedRead, FramedWrite};
 use tower::Service;
 
 #[derive(Clone)]
-pub struct Peer<'network> {
+pub struct Peer {
     connection: Connection,
-    _marker: PhantomData<&'network ()>,
 }
 
-impl<'network> Peer<'network> {
+impl Peer {
     pub(crate) fn new(connection: Connection) -> Self {
-        Self {
-            connection,
-            _marker: PhantomData,
-        }
+        Self { connection }
     }
 
     pub fn peer_id(&self) -> PeerId {
@@ -67,10 +62,10 @@ impl<'network> Peer<'network> {
     }
 }
 
-impl<'network> Service<Request<Bytes>> for Peer<'network> {
+impl Service<Request<Bytes>> for Peer {
     type Response = Response<Bytes>;
     type Error = crate::Error;
-    type Future = BoxFuture<'network, Result<Self::Response, Self::Error>>;
+    type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
 
     #[inline]
     fn poll_ready(
@@ -87,10 +82,10 @@ impl<'network> Service<Request<Bytes>> for Peer<'network> {
     }
 }
 
-impl<'network> Service<Message<Bytes>> for Peer<'network> {
+impl Service<Message<Bytes>> for Peer {
     type Response = ();
     type Error = crate::Error;
-    type Future = BoxFuture<'network, Result<Self::Response, Self::Error>>;
+    type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
 
     #[inline]
     fn poll_ready(
