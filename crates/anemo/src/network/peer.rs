@@ -9,6 +9,7 @@ use futures::future::BoxFuture;
 use tokio_util::codec::{FramedRead, FramedWrite};
 use tower::Service;
 
+/// Handle to a connection with a remote Peer.
 #[derive(Clone)]
 pub struct Peer {
     connection: Connection,

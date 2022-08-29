@@ -4,8 +4,8 @@ pub enum Address {
     /// A plain SocketAddr
     SocketAddr(std::net::SocketAddr),
 
-    /// Host and Port where 'host' should be either a string representation of an IpAddr address a
-    /// host name that will be resolved via DNS.
+    /// Host and Port where 'host' should be either a string representation of an IpAddr address or
+    /// a host name that will be resolved via DNS.
     HostAndPort { host: Box<str>, port: u16 },
 
     /// A string representation of a SocketAddr or a string like <host_name>:<port> pair where

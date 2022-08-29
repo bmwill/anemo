@@ -23,6 +23,7 @@ mod wire;
 #[cfg(test)]
 mod tests;
 
+/// A builder for a [`Network`].
 pub struct Builder {
     bind_address: Address,
     config: Option<Config>,
@@ -33,16 +34,27 @@ pub struct Builder {
 }
 
 impl Builder {
+    /// Set the [`Config`] that this network should use.
     pub fn config(mut self, config: Config) -> Self {
         self.config = Some(config);
         self
     }
 
+    /// Set the `server-name` that will be used when constructing a self-signed X.509 certificate to
+    /// be used in the TLS handshake.
+    ///
+    /// Traditionally a `server-name` is intended to be the DNS name that is being dialed, although
+    /// since Anemo does not require parties to use DNS names, nor does it rely on a central CA,
+    /// `server-name` is instead used to identify the network name that this Peer can connect to.
+    /// In other words, The TLS handshake will only be successful if all parties use the same
+    /// `server-name`.
     pub fn server_name<T: Into<String>>(mut self, server_name: T) -> Self {
         self.server_name = Some(server_name.into());
         self
     }
 
+    /// Set the Ed25519 Private Key that will be used to perform the TLS handshake.
+    /// The corresponding Public Key will be this node's [`PeerId`].
     pub fn private_key(mut self, private_key: [u8; 32]) -> Self {
         self.private_key = Some(private_key);
         self
@@ -57,6 +69,13 @@ impl Builder {
         self.private_key(bytes)
     }
 
+    /// Start a [`Network`] and return a handle to it.
+    ///
+    /// # Panics
+    ///
+    /// This method will panic if:
+    /// * not called from within the context of a tokio runtime.
+    /// * no `private-key` or `server-name` were set.
     pub fn start<T>(self, service: T) -> Result<Network>
     where
         T: Clone + Send + 'static,
@@ -79,9 +98,6 @@ impl Builder {
         Ok(Self::network_start(endpoint, incoming, service, config))
     }
 
-    /// Start a network and return a handle to it
-    ///
-    /// Requires that this is called from within the context of a tokio runtime
     fn network_start(
         endpoint: Endpoint,
         incoming: Incoming,
@@ -119,6 +135,10 @@ impl Builder {
     }
 }
 
+/// Handle to a network.
+///
+/// This handle can be cheaply cloned and shared across many threads.
+/// Once all handles have been dropped the network will gracefully shutdown.
 #[derive(Clone)]
 pub struct Network(Arc<NetworkInner>);
 
@@ -131,6 +151,7 @@ pub struct Network(Arc<NetworkInner>);
 // The Network handle could contain a oncecell that is initialized once the builder is finished and
 // until such point, all access results in a Panic.
 impl Network {
+    /// Binds to the provided address, and returns a [`Builder`].
     pub fn bind<A: Into<Address>>(addr: A) -> Builder {
         Builder {
             bind_address: addr.into(),
@@ -181,11 +202,12 @@ impl Network {
         self.0.rpc(peer, request).await
     }
 
-    /// Returns the socket address that this Network is listening on
+    /// Return the local address that this Network is listening on.
     pub fn local_addr(&self) -> SocketAddr {
         self.0.local_addr()
     }
 
+    /// Return the [`PeerId`] of this Network.
     pub fn peer_id(&self) -> PeerId {
         self.0.peer_id()
     }
@@ -239,7 +261,7 @@ impl NetworkInner {
         Ok(())
     }
 
-    pub fn peer(&self, peer_id: PeerId) -> Option<Peer> {
+    fn peer(&self, peer_id: PeerId) -> Option<Peer> {
         let connection = self.active_peers.get(&peer_id)?;
         Some(Peer::new(connection))
     }

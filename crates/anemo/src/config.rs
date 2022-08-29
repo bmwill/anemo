@@ -3,40 +3,84 @@ use crate::{
     PeerId, Result,
 };
 use pkcs8::EncodePrivateKey;
-// use ed25519::pkcs8::EncodePrivateKey;
 use quinn::VarInt;
 use rcgen::{CertificateParams, KeyPair, SignatureAlgorithm};
 use serde::{Deserialize, Serialize};
 use std::{sync::Arc, time::Duration};
 
+/// Configuration for a [`Network`](crate::Network).
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 #[non_exhaustive]
 pub struct Config {
+    /// Configuration for the underlying QUIC transport.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub quic: Option<QuicConfig>,
 
-    //
-    // ConnectionManager Configs
-    //
+    /// Size of the internal `ConnectionManager`s mailbox.
+    ///
+    /// One example of how this mailbox is used is for submitting
+    /// connection requests via [`Network::connect`](crate::Network::connect).
+    ///
+    /// If unspecified, this will default to `128`.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub connection_manager_channel_capacity: Option<usize>,
 
     /// Trigger connectivity checks every interval.
+    ///
+    /// If unspecified, this will default to `5,000` milliseconds.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub connectivity_check_interval_ms: Option<u64>,
 
     /// Maximum delay between 2 consecutive attempts to connect with a peer.
+    ///
+    /// If unspecified, this will default to `60,000` milliseconds.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub max_connection_backoff_ms: Option<u64>,
+
+    /// The backoff step size, in milliseconds, used to calculate the delay between two consecutive
+    /// attempts to connect with a peer.
+    ///
+    /// If unspecified, this will default to `10,000` milliseconds.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub connection_backoff_ms: Option<u64>,
+
+    /// Maximum number of concurrent connections to attempt to establish at a given point in time.
+    ///
+    /// If unspecified, this will default to `100`.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub max_concurrent_outstanding_connecting_connections: Option<usize>,
+
+    /// Size of the broadcast channel use for subscribing to
+    /// [`PeerEvent`](crate::types::PeerEvent)s via
+    /// [`Network::subscribe`](crate::Network::subscribe).
+    ///
+    /// If unspecified, this will default to `128`.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub peer_event_broadcast_channel_capacity: Option<usize>,
     // TODO enable configuring of max frame size
     // max_frame_size: Option<usize>,
 }
 
+/// Configuration for the underlying QUIC transport.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 #[non_exhaustive]
 pub struct QuicConfig {
+    /// Maximum number of incoming bidirectional streams that may be open concurrently.
+    ///
+    /// Must be nonzero for the peer to open any bidirectional streams.
+    ///
+    /// If unspecified, this will default to `100`.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub max_concurrent_bidi_streams: Option<u64>,
+
+    /// Maximum number of incoming unidirectional streams that may be open concurrently.
+    ///
+    /// Must be nonzero for the peer to open any unidirectional streams.
+    ///
+    /// If unspecified, this will default to `100`.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub max_concurrent_uni_streams: Option<u64>,
 
     /// How long to wait to hear from a peer before timing out a connection.
@@ -44,9 +88,10 @@ pub struct QuicConfig {
     /// In the absence of any keep-alive messages, connections will be closed if they remain idle
     /// for at least this duration.
     ///
-    /// If unspecified, this will default to 10,000 milliseconds.
+    /// If unspecified, this will default to `10,000` milliseconds.
     ///
     /// Maximum possible value is 2^62 milliseconds.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub max_idle_timeout_ms: Option<u64>,
 
     /// Interval at which to send keep-alives to maintain otherwise idle connections.
@@ -54,6 +99,7 @@ pub struct QuicConfig {
     /// Keep-alives prevent otherwise idle connections from timing out.
     ///
     /// If unspecified, this will default to `None`, disabling keep-alives.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub keep_alive_interval_ms: Option<u64>,
 }
 
@@ -154,7 +200,7 @@ impl QuicConfig {
 }
 
 #[derive(Debug, Default)]
-pub struct EndpointConfigBuilder {
+pub(crate) struct EndpointConfigBuilder {
     /// Ed25519 Private Key
     pub private_key: Option<[u8; 32]>,
 
@@ -282,15 +328,13 @@ impl EndpointConfigBuilder {
 }
 
 #[derive(Debug)]
-pub struct EndpointConfig {
+pub(crate) struct EndpointConfig {
     peer_id: PeerId,
     certificate: rustls::Certificate,
     pkcs8_der: rustls::PrivateKey,
     quinn_server_config: quinn::ServerConfig,
     quinn_client_config: quinn::ClientConfig,
 
-    // TODO Maybe use server name to identify the network name?
-    //
     /// Note that the end-entity certificate must have the
     /// [Subject Alternative Name](https://tools.ietf.org/html/rfc6125#section-4.1)
     /// extension to describe, e.g., the valid DNS name.
