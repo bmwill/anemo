@@ -6,7 +6,7 @@ use crate::{
         response::{RawResponseHeader, ResponseHeader},
         Version,
     },
-    Request, Response, Result,
+    Config, Request, Response, Result,
 };
 use anyhow::{anyhow, bail};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
@@ -19,10 +19,11 @@ const ANEMO: &[u8; 5] = b"anemo";
 /// Returns a fully configured length-delimited codec for writing/reading
 /// serialized frames to/from a socket.
 pub(crate) fn network_message_frame_codec() -> LengthDelimitedCodec {
-    const MAX_FRAME_SIZE: usize = 1 << 23; // 8 MiB
+    //TODO pipe through config
+    let config = Config::default();
 
     LengthDelimitedCodec::builder()
-        .max_frame_length(MAX_FRAME_SIZE)
+        .max_frame_length(config.max_frame_size())
         .length_field_length(4)
         .big_endian()
         .new_codec()

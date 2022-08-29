@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::{sync::Arc, time::Duration};
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 #[non_exhaustive]
 pub struct Config {
     pub quic: Option<QuicConfig>,
@@ -27,9 +28,12 @@ pub struct Config {
     pub connection_backoff_ms: Option<u64>,
     pub max_concurrent_outstanding_connecting_connections: Option<usize>,
     pub peer_event_broadcast_channel_capacity: Option<usize>,
+    // TODO enable configuring of max frame size
+    // max_frame_size: Option<usize>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 #[non_exhaustive]
 pub struct QuicConfig {
     pub max_concurrent_bidi_streams: Option<u64>,
@@ -77,7 +81,6 @@ impl Config {
         )
     }
 
-    #[allow(unused)]
     pub(crate) fn max_connection_backoff(&self) -> Duration {
         const MAX_CONNECTION_BACKOFF_MS: u64 = 60_000; // 1 minute
 
@@ -87,7 +90,6 @@ impl Config {
         )
     }
 
-    #[allow(unused)]
     pub(crate) fn connection_backoff(&self) -> Duration {
         const CONNECTION_BACKOFF_MS: u64 = 10_000; // 10 seconds
 
@@ -106,6 +108,14 @@ impl Config {
 
         self.peer_event_broadcast_channel_capacity
             .unwrap_or(PEER_EVENT_BROADCAST_CHANNEL_CAPACITY)
+    }
+
+    // TODO enable configuring of max frame size
+    pub(crate) fn max_frame_size(&self) -> usize {
+        const MAX_FRAME_SIZE: usize = 1 << 23; // 8 MiB
+
+        // self.max_frame_size.unwrap_or(MAX_FRAME_SIZE)
+        MAX_FRAME_SIZE
     }
 }
 
