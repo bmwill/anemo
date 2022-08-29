@@ -33,7 +33,7 @@ struct ConnectingOutput {
     maybe_oneshot: Option<tokio::sync::oneshot::Sender<Result<PeerId>>>,
 }
 
-pub struct ConnectionManager {
+pub(crate) struct ConnectionManager {
     config: Arc<Config>,
 
     endpoint: Arc<Endpoint>,
@@ -378,7 +378,7 @@ impl<T> std::future::Future for JoinHandle<T> {
 }
 
 #[derive(Debug, Clone)]
-pub struct ActivePeers(Arc<RwLock<ActivePeersInner>>);
+pub(crate) struct ActivePeers(Arc<RwLock<ActivePeersInner>>);
 
 impl ActivePeers {
     pub fn new(channel_size: usize) -> Self {
@@ -426,7 +426,7 @@ impl ActivePeers {
 }
 
 #[derive(Debug)]
-pub struct ActivePeersInner {
+struct ActivePeersInner {
     connections: HashMap<PeerId, Connection>,
     peer_event_sender: tokio::sync::broadcast::Sender<crate::types::PeerEvent>,
 }

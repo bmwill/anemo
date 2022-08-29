@@ -13,7 +13,7 @@ use std::{
 use tracing::trace;
 
 #[derive(Debug)]
-pub struct Endpoint {
+pub(crate) struct Endpoint {
     inner: quinn::Endpoint,
     local_addr: SocketAddr,
     config: EndpointConfig,
@@ -96,7 +96,7 @@ impl Endpoint {
 /// Stream of incoming connections.
 #[derive(Debug)]
 #[must_use = "futures/streams/sinks do nothing unless you `.await` or poll them"]
-pub struct Incoming(quinn::Incoming);
+pub(crate) struct Incoming(quinn::Incoming);
 
 impl Incoming {
     pub(crate) fn new(inner: quinn::Incoming) -> Self {
@@ -116,7 +116,7 @@ impl futures::stream::Stream for Incoming {
 
 #[derive(Debug)]
 #[must_use = "futures/streams/sinks do nothing unless you `.await` or poll them"]
-pub struct Connecting {
+pub(crate) struct Connecting {
     inner: quinn::Connecting,
     origin: ConnectionOrigin,
 }
@@ -163,7 +163,7 @@ impl Future for Connecting {
     }
 }
 
-pub struct NewConnection {
+pub(crate) struct NewConnection {
     pub connection: Connection,
     pub uni_streams: IncomingUniStreams,
     pub bi_streams: IncomingBiStreams,

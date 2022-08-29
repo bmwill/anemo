@@ -2,7 +2,7 @@ use super::{
     wire::{network_message_frame_codec, read_request, write_response},
     ActivePeers,
 };
-use crate::{connection::Connection, endpoint::NewConnection, PeerId, Request, Response, Result};
+use crate::{connection::Connection, endpoint::NewConnection, Request, Response, Result};
 use bytes::Bytes;
 use futures::{
     stream::{Fuse, FuturesUnordered},
@@ -14,7 +14,7 @@ use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
 use tower::{util::BoxCloneService, ServiceExt};
 use tracing::{info, trace, warn};
 
-pub struct InboundRequestHandler {
+pub(crate) struct InboundRequestHandler {
     connection: Connection,
     incoming_bi: Fuse<IncomingBiStreams>,
     incoming_uni: Fuse<IncomingUniStreams>,
@@ -68,7 +68,7 @@ impl InboundRequestHandler {
                         Ok((bi_tx, bi_rx)) => {
                             info!("incoming bi stream! {}", bi_tx.id());
                             let request_handler =
-                                BiStreamRequestHandler::new(self.connection.peer_id(), self.service.clone(), bi_tx, bi_rx);
+                                BiStreamRequestHandler::new(self.connection.clone(), self.service.clone(), bi_tx, bi_rx);
                             inflight_requests.push(request_handler.handle());
                         }
                         Err(e) => {
@@ -104,7 +104,7 @@ impl InboundRequestHandler {
 }
 
 struct BiStreamRequestHandler {
-    peer_id: PeerId,
+    connection: Connection,
     service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
     send_stream: FramedWrite<SendStream, LengthDelimitedCodec>,
     recv_stream: FramedRead<RecvStream, LengthDelimitedCodec>,
@@ -112,13 +112,13 @@ struct BiStreamRequestHandler {
 
 impl BiStreamRequestHandler {
     fn new(
-        peer_id: PeerId,
+        connection: Connection,
         service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
         send_stream: SendStream,
         recv_stream: RecvStream,
     ) -> Self {
         Self {
-            peer_id,
+            connection,
             service,
             send_stream: FramedWrite::new(send_stream, network_message_frame_codec()),
             recv_stream: FramedRead::new(recv_stream, network_message_frame_codec()),
@@ -138,8 +138,17 @@ impl BiStreamRequestHandler {
 
         let mut request = read_request(&mut self.recv_stream).await?;
 
-        // Set the PeerId of this peer
-        request.extensions_mut().insert(self.peer_id);
+        // TODO maybe provide all of this via a single ConnectionMetadata type
+        //
+        // Provide Connection Metadata to the handler via extentions including:
+        // * PeerId
+        // * ConnectionOrigin
+        // * Remote SocketAddr
+        request.extensions_mut().insert(self.connection.peer_id());
+        request.extensions_mut().insert(self.connection.origin());
+        request
+            .extensions_mut()
+            .insert(self.connection.remote_address());
 
         // Issue request to configured Service
         let response = self.service.oneshot(request).await.expect("Infallible");

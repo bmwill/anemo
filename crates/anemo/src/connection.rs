@@ -4,7 +4,7 @@ use std::{fmt, net::SocketAddr, time::Duration};
 use tracing::trace;
 
 #[derive(Clone)]
-pub struct Connection {
+pub(crate) struct Connection {
     inner: quinn::Connection,
     peer_id: PeerId,
     origin: ConnectionOrigin,
