@@ -231,6 +231,106 @@ mod test {
         Ok(())
     }
 
+    // Test to verify that multiple connections to the same endpoint can be open simultaneously.
+    // While we don't currently allow for this, we may want to eventually enable/allow for it.
+    #[tokio::test]
+    async fn multiple_connections() -> Result<()> {
+        let _gaurd = crate::init_tracing_for_testing();
+
+        let msg = b"hello";
+        let config_1 = EndpointConfig::random("test");
+        let (endpoint_1, _incoming_1) = Endpoint::new_with_address(config_1, "localhost:0")?;
+        let peer_id_1 = endpoint_1.config.peer_id();
+
+        println!("1: {}", endpoint_1.local_addr());
+
+        let config_2 = EndpointConfig::random("test");
+        let (endpoint_2, mut incoming_2) = Endpoint::new_with_address(config_2, "localhost:0")?;
+        let peer_id_2 = endpoint_2.config.peer_id();
+        let addr_2 = endpoint_2.local_addr();
+        println!("2: {}", endpoint_2.local_addr());
+
+        let peer_1 = async move {
+            let connection_1 = endpoint_1
+                .connect(addr_2.into())
+                .unwrap()
+                .await
+                .unwrap()
+                .connection;
+            assert_eq!(connection_1.peer_id(), peer_id_2);
+            let connection_2 = endpoint_1
+                .connect(addr_2.into())
+                .unwrap()
+                .await
+                .unwrap()
+                .connection;
+            assert_eq!(connection_2.peer_id(), peer_id_2);
+            let req_1 = async {
+                let mut send_stream = connection_2.open_uni().await.unwrap();
+                send_stream.write_all(msg).await.unwrap();
+                send_stream.finish().await.unwrap();
+            };
+            let req_2 = async {
+                let mut send_stream = connection_1.open_uni().await.unwrap();
+                send_stream.write_all(msg).await.unwrap();
+                send_stream.finish().await.unwrap();
+            };
+            join(req_1, req_2).await;
+            endpoint_1.close();
+            endpoint_1.inner.wait_idle().await;
+            // Result::<()>::Ok(())
+        };
+
+        let peer_2 = async move {
+            let NewConnection {
+                connection,
+                uni_streams,
+                ..
+            } = incoming_2.next().await.unwrap().await.unwrap();
+            let (connection_1, mut uni_streams_1) = (connection, uni_streams);
+            assert_eq!(connection_1.peer_id(), peer_id_1);
+
+            let NewConnection {
+                connection,
+                uni_streams,
+                ..
+            } = incoming_2.next().await.unwrap().await.unwrap();
+            let (connection_2, mut uni_streams_2) = (connection, uni_streams);
+            assert_eq!(connection_2.peer_id(), peer_id_1);
+            assert_ne!(connection_1.stable_id(), connection_2.stable_id());
+
+            println!("connection_1: {:#?}", connection_1);
+            println!("connection_2: {:#?}", connection_2);
+
+            let req_1 = async move {
+                let mut recv = uni_streams_1.next().await.unwrap().unwrap();
+                let mut buf = Vec::new();
+                AsyncReadExt::read_to_end(&mut recv, &mut buf)
+                    .await
+                    .unwrap();
+                println!("from remote: {}", buf.escape_ascii());
+                assert_eq!(buf, msg);
+            };
+            let req_2 = async move {
+                let mut recv = uni_streams_2.next().await.unwrap().unwrap();
+                let mut buf = Vec::new();
+                AsyncReadExt::read_to_end(&mut recv, &mut buf)
+                    .await
+                    .unwrap();
+                println!("from remote: {}", buf.escape_ascii());
+                assert_eq!(buf, msg);
+            };
+
+            join(req_1, req_2).await;
+            endpoint_2.close();
+            endpoint_2.inner.wait_idle().await;
+            // Result::<()>::Ok(())
+        };
+
+        timeout(join(peer_1, peer_2)).await?;
+        Ok(())
+    }
+
     async fn timeout<F: std::future::Future>(
         f: F,
     ) -> Result<F::Output, tokio::time::error::Elapsed> {
