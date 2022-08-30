@@ -185,7 +185,7 @@ fn pki_error(error: webpki::Error) -> rustls::Error {
 pub(crate) fn peer_id_from_certificate(
     certificate: &rustls::Certificate,
 ) -> Result<PeerId, rustls::Error> {
-    use x509_parser::{certificate::X509Certificate, traits::FromDer};
+    use x509_parser::{certificate::X509Certificate, prelude::FromDer};
 
     let cert = X509Certificate::from_der(certificate.0.as_ref())
         .map_err(|_| rustls::Error::InvalidCertificateEncoding)?;
