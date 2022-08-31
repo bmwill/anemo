@@ -75,6 +75,19 @@ impl Router {
 
         self
     }
+
+    pub fn add_rpc_service<S>(self, service: S) -> Self
+    where
+        S: Service<Request<Bytes>, Response = Response<Bytes>, Error = Infallible>
+            + crate::rpc::RpcService
+            + Clone
+            + Send
+            + 'static,
+        S::Future: Send + 'static,
+    {
+        let path = format!("/{}/*rest", S::SERVICE_NAME);
+        self.route(&path, service)
+    }
 }
 
 impl Service<Request<Bytes>> for Router {

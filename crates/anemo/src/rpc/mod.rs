@@ -251,7 +251,7 @@ pub mod server {
     /// Existing tower_service::Service implementations with the correct form will
     /// automatically implement `UnaryService`.
     pub trait UnaryService<R> {
-        /// Protobuf response message type
+        /// Response message type
         type Response;
 
         /// Response future

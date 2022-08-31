@@ -2,7 +2,7 @@ use greeter::{greeter_client::GreeterClient, greeter_server::Greeter};
 use serde::{Deserialize, Serialize};
 
 pub use anemo::rpc::codec::JsonCodec;
-use anemo::{rpc::Status, Network, Request, Response};
+use anemo::{rpc::Status, Network, Request, Response, Router};
 
 use crate::greeter::greeter_server::GreeterServer;
 
@@ -54,7 +54,7 @@ async fn main() {
             bytes
         })
         .server_name("test")
-        .start(GreeterServer::new(MyGreeter::default()))
+        .start(Router::new().add_rpc_service(GreeterServer::new(MyGreeter::default())))
         .unwrap();
 
     let network_2 = Network::bind("localhost:0")
@@ -64,7 +64,7 @@ async fn main() {
             bytes
         })
         .server_name("test")
-        .start(GreeterServer::new(MyGreeter::default()))
+        .start(Router::new().add_rpc_service(GreeterServer::new(MyGreeter::default())))
         .unwrap();
 
     let peer = network_1.connect(network_2.local_addr()).await.unwrap();
