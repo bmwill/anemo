@@ -1,6 +1,6 @@
 # anemo
 
-[![Documentation (main)](https://img.shields.io/badge/docs-master-59f)](https://MystenLabs.github.io/anemo/)
+[![Documentation (main)](https://img.shields.io/badge/docs-master-59f)](https://MystenLabs.github.io/anemo/anemo)
 [![License](https://img.shields.io/badge/license-Apache-green.svg)](LICENSE-APACHE)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE-MIT)
 
