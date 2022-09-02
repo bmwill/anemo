@@ -12,7 +12,7 @@ use quinn::{Datagrams, IncomingBiStreams, IncomingUniStreams, RecvStream, SendSt
 use std::convert::Infallible;
 use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
 use tower::{util::BoxCloneService, ServiceExt};
-use tracing::{info, trace, warn};
+use tracing::{info, trace};
 
 pub(crate) struct InboundRequestHandler {
     connection: Connection,
@@ -58,7 +58,7 @@ impl InboundRequestHandler {
                     match uni {
                         Ok(recv_stream) => trace!("incoming uni stream! {}", recv_stream.id()),
                         Err(e) => {
-                            warn!("error listening for incoming uni streams: {e}");
+                            trace!("error listening for incoming uni streams: {e}");
                             break;
                         }
                     }
@@ -66,13 +66,13 @@ impl InboundRequestHandler {
                 bi = self.incoming_bi.select_next_some() => {
                     match bi {
                         Ok((bi_tx, bi_rx)) => {
-                            info!("incoming bi stream! {}", bi_tx.id());
+                            trace!("incoming bi stream! {}", bi_tx.id());
                             let request_handler =
                                 BiStreamRequestHandler::new(self.connection.clone(), self.service.clone(), bi_tx, bi_rx);
                             inflight_requests.push(request_handler.handle());
                         }
                         Err(e) => {
-                            warn!("error listening for incoming bi streams: {e}");
+                            trace!("error listening for incoming bi streams: {e}");
                             break;
                         }
                     }
@@ -83,7 +83,7 @@ impl InboundRequestHandler {
                     match datagram {
                         Ok(datagram) => trace!("incoming datagram of length: {}", datagram.len()),
                         Err(e) => {
-                            warn!("error listening for datagrams: {e}");
+                            trace!("error listening for datagrams: {e}");
                             break;
                         }
                     }
@@ -99,7 +99,7 @@ impl InboundRequestHandler {
             crate::types::DisconnectReason::ConnectionLost,
         );
 
-        info!("InboundRequestHandler ended");
+        info!(peer =% self.connection.peer_id(), "InboundRequestHandler ended");
     }
 }
 
@@ -127,7 +127,7 @@ impl BiStreamRequestHandler {
 
     async fn handle(self) {
         if let Err(e) = self.do_handle().await {
-            warn!("handling request failed: {e}");
+            trace!("handling request failed: {e}");
         }
     }
 

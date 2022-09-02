@@ -8,7 +8,6 @@ use anyhow::anyhow;
 use bytes::Bytes;
 use std::{convert::Infallible, net::SocketAddr, sync::Arc};
 use tower::{util::BoxCloneService, Service, ServiceExt};
-use tracing::info;
 
 mod connection_manager;
 pub use connection_manager::KnownPeers;
@@ -126,8 +125,6 @@ impl Builder {
             known_peers,
             connection_manager_handle,
         }));
-
-        info!("Starting network");
 
         tokio::spawn(connection_manager.start());
 

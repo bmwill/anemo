@@ -14,6 +14,8 @@ pub use network::{Builder, KnownPeers, Network, Peer};
 pub use routing::Router;
 pub use types::{request::Request, response::Response, ConnectionOrigin, PeerId};
 
+pub use async_trait::async_trait;
+
 #[doc(hidden)]
 pub mod codegen {
     pub use super::error::BoxError;
@@ -31,8 +33,8 @@ pub mod codegen {
 }
 
 #[cfg(test)]
-pub fn init_tracing_for_testing() -> ::tracing::dispatcher::DefaultGuard {
-    use tracing_subscriber::{fmt::format::FmtSpan, EnvFilter, FmtSubscriber};
+fn init_tracing_for_testing() -> ::tracing::dispatcher::DefaultGuard {
+    use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
     let filter =
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info,quinn=warn"));
@@ -42,7 +44,7 @@ pub fn init_tracing_for_testing() -> ::tracing::dispatcher::DefaultGuard {
         .with_file(true)
         .with_line_number(true)
         .with_target(false)
-        .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
+        // .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
         .with_test_writer()
         .finish();
 

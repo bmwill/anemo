@@ -17,7 +17,7 @@ use std::{
     sync::{Arc, RwLock},
 };
 use tower::util::BoxCloneService;
-use tracing::{error, info, instrument};
+use tracing::{debug, info, instrument, trace};
 
 #[derive(Debug)]
 pub enum ConnectionManagerRequest {
@@ -113,7 +113,6 @@ impl ConnectionManager {
                         break;
                     };
 
-                    info!("recieved new request");
                     match request {
                         ConnectionManagerRequest::ConnectRequest(address, peer_id, oneshot) => {
                             self.handle_connect_request(address, peer_id, oneshot);
@@ -161,7 +160,7 @@ impl ConnectionManager {
     }
 
     fn handle_incoming(&mut self, connecting: Connecting) {
-        info!("recieved new incoming connection");
+        trace!("recieved new incoming connection");
         let join_handle = JoinHandle(tokio::spawn(connecting.map(|connecting_result| {
             ConnectingOutput {
                 connecting_result,
@@ -180,15 +179,15 @@ impl ConnectionManager {
     ) {
         match connecting_result {
             Ok(new_connection) => {
-                info!("new connection complete");
                 let peer_id = new_connection.connection.peer_id();
+                debug!(peer_id =% peer_id, "new connection");
                 self.add_peer(new_connection);
                 if let Some(oneshot) = maybe_oneshot {
                     let _ = oneshot.send(Ok(peer_id));
                 }
             }
             Err(e) => {
-                error!("connecting failed: {e}");
+                debug!("connecting failed: {e}");
                 if let Some(oneshot) = maybe_oneshot {
                     let _ = oneshot.send(Err(e));
                 }
@@ -512,7 +511,7 @@ impl ActivePeersInner {
                     entry.get().origin(),
                     new_connection.connection.origin(),
                 ) {
-                    info!("closing old connection with {peer_id:?} to mitigate simultaneous dial");
+                    debug!("closing old connection with {peer_id:?} to mitigate simultaneous dial");
                     let old_connection = entry.insert(new_connection.connection.clone());
                     old_connection.close();
                     self.send_event(crate::types::PeerEvent::LostPeer(
@@ -520,7 +519,7 @@ impl ActivePeersInner {
                         crate::types::DisconnectReason::Requested,
                     ));
                 } else {
-                    info!("closing new connection with {peer_id:?} to mitigate simultaneous dial");
+                    debug!("closing new connection with {peer_id:?} to mitigate simultaneous dial");
                     new_connection.connection.close();
                     // Early return to avoid standing up Incoming Request handlers
                     return None;
