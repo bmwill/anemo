@@ -1,3 +1,4 @@
+use super::Extensions;
 use crate::{
     types::{HeaderMap, Version},
     PeerId,
@@ -15,7 +16,7 @@ pub struct RequestHeader {
     pub headers: HeaderMap,
 
     /// The request's extensions
-    pub extensions: http::Extensions,
+    pub extensions: Extensions,
 }
 
 impl Default for RequestHeader {
@@ -91,11 +92,11 @@ impl<T> Request<T> {
         &mut self.head.headers
     }
 
-    pub(crate) fn extensions(&self) -> &http::Extensions {
+    pub fn extensions(&self) -> &Extensions {
         &self.head.extensions
     }
 
-    pub(crate) fn extensions_mut(&mut self) -> &mut http::Extensions {
+    pub fn extensions_mut(&mut self) -> &mut Extensions {
         &mut self.head.extensions
     }
 
@@ -113,6 +114,18 @@ impl<T> Request<T> {
     }
 
     pub fn into_body(self) -> T {
+        self.body
+    }
+
+    pub fn inner(&self) -> &T {
+        &self.body
+    }
+
+    pub fn inner_mut(&mut self) -> &mut T {
+        &mut self.body
+    }
+
+    pub fn into_inner(self) -> T {
         self.body
     }
 

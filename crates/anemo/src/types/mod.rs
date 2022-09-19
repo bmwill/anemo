@@ -6,6 +6,8 @@ pub mod response;
 pub use address::Address;
 pub use peer_id::{ConnectionOrigin, PeerId};
 
+pub use http::Extensions;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u16)]
 pub enum Version {
