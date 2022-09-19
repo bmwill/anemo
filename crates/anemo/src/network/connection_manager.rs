@@ -31,6 +31,8 @@ pub enum ConnectionManagerRequest {
 struct ConnectingOutput {
     connecting_result: Result<NewConnection>,
     maybe_oneshot: Option<tokio::sync::oneshot::Sender<Result<PeerId>>>,
+    target_address: Option<Address>,
+    target_peer_id: Option<PeerId>,
 }
 
 pub(crate) struct ConnectionManager {
@@ -165,6 +167,8 @@ impl ConnectionManager {
             ConnectingOutput {
                 connecting_result,
                 maybe_oneshot: None,
+                target_address: None,
+                target_peer_id: None,
             }
         })));
         self.pending_connections.push(join_handle);
@@ -175,6 +179,8 @@ impl ConnectionManager {
         ConnectingOutput {
             connecting_result,
             maybe_oneshot,
+            target_address,
+            target_peer_id,
         }: ConnectingOutput,
     ) {
         match connecting_result {
@@ -187,7 +193,11 @@ impl ConnectionManager {
                 }
             }
             Err(e) => {
-                debug!("connecting failed: {e}");
+                debug!(
+                    target_address = ?target_address,
+                    target_peer_id = ?target_peer_id,
+                    "connecting failed: {e}"
+                );
                 if let Some(oneshot) = maybe_oneshot {
                     let _ = oneshot.send(Err(e));
                 }
@@ -291,6 +301,7 @@ impl ConnectionManager {
         peer_id: Option<PeerId>,
         oneshot: tokio::sync::oneshot::Sender<Result<PeerId>>,
     ) {
+        let target_address = Some(address.clone());
         let connecting = if let Some(peer_id) = peer_id {
             self.endpoint
                 .connect_with_expected_peer_id(address, peer_id)
@@ -305,6 +316,8 @@ impl ConnectionManager {
             ConnectingOutput {
                 connecting_result,
                 maybe_oneshot: Some(oneshot),
+                target_address,
+                target_peer_id: peer_id,
             }
         }));
         self.pending_connections.push(join_handle);
