@@ -78,6 +78,11 @@ impl StatusCode {
         matches!(self, StatusCode::Success)
     }
 
+    #[inline]
+    pub fn is_client_error(self) -> bool {
+        matches!(self, StatusCode::BadRequest | StatusCode::NotFound)
+    }
+
     /// Check if status is within 500-599.
     #[inline]
     pub fn is_server_error(self) -> bool {
