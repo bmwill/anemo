@@ -189,7 +189,7 @@ async fn dropped_connection() -> Result<()> {
 
     println!("{}", response.body().escape_ascii());
 
-    let peer = network_1.peer(peer).unwrap();
+    let mut peer = network_1.peer(peer).unwrap();
 
     drop(network_2);
 
@@ -296,4 +296,100 @@ async fn drop_shutdown() -> Result<()> {
     tracing::info!("err: {err}");
 
     Ok(())
+}
+
+#[tokio::test]
+async fn user_provided_client_service_layer() {
+    use std::sync::atomic::AtomicUsize;
+    use std::sync::atomic::Ordering;
+    use std::sync::Arc;
+    use std::task::{Context, Poll};
+    use tower::layer::{layer_fn, Layer};
+    use tower::Service;
+
+    #[derive(Clone)]
+    pub struct CounterService<S> {
+        counter: Arc<AtomicUsize>,
+        service: S,
+    }
+
+    impl<S, Request> Service<Request> for CounterService<S>
+    where
+        S: Service<Request>,
+    {
+        type Response = S::Response;
+        type Error = S::Error;
+        type Future = S::Future;
+
+        fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+            self.service.poll_ready(cx)
+        }
+
+        fn call(&mut self, request: Request) -> Self::Future {
+            // Increment the count
+            self.counter
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+
+            self.service.call(request)
+        }
+    }
+
+    let create_network = || {
+        let server_counter = Arc::new(AtomicUsize::new(0));
+        let server_counter_clone = server_counter.clone();
+        let server_layer = layer_fn(move |service| CounterService {
+            service,
+            counter: server_counter_clone.clone(),
+        });
+        let client_counter = Arc::new(AtomicUsize::new(0));
+        let client_counter_clone = client_counter.clone();
+        let client_layer = layer_fn(move |service| CounterService {
+            service,
+            counter: client_counter_clone.clone(),
+        });
+
+        (
+            Network::bind("localhost:0")
+                .server_name("test")
+                .outbound_request_layer(client_layer)
+                .random_private_key()
+                .start(server_layer.layer(echo_service()))
+                .unwrap(),
+            server_counter,
+            client_counter,
+        )
+    };
+
+    let _gaurd = crate::init_tracing_for_testing();
+
+    let (network_1, server_counter_1, client_counter_1) = create_network();
+    let (network_2, server_counter_2, client_counter_2) = create_network();
+
+    let peer_id = network_1.connect(network_2.local_addr()).await.unwrap();
+
+    let request = Request::new(Bytes::from_static(b"hello"));
+    let _ = network_1
+        .peer(peer_id)
+        .unwrap()
+        .oneshot(request)
+        .await
+        .unwrap();
+
+    assert_eq!(0, server_counter_1.load(Ordering::SeqCst));
+    assert_eq!(1, client_counter_1.load(Ordering::SeqCst));
+    assert_eq!(1, server_counter_2.load(Ordering::SeqCst));
+    assert_eq!(0, client_counter_2.load(Ordering::SeqCst));
+
+    let request = Request::new(Bytes::from_static(b"hello"));
+    let _ = network_2
+        .peer(network_1.peer_id())
+        .unwrap()
+        .oneshot(request)
+        .await
+        .unwrap();
+
+    assert_eq!(1, server_counter_1.load(Ordering::SeqCst));
+    assert_eq!(1, client_counter_1.load(Ordering::SeqCst));
+    assert_eq!(1, server_counter_2.load(Ordering::SeqCst));
+    assert_eq!(1, client_counter_2.load(Ordering::SeqCst));
 }

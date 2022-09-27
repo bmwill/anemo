@@ -1,13 +1,14 @@
 use crate::{
-    config::EndpointConfig,
-    endpoint::{Endpoint, Incoming},
-    types::Address,
-    Config, PeerId, Request, Response, Result,
+    config::EndpointConfig, endpoint::Endpoint, types::Address, Config, PeerId, Request, Response,
+    Result,
 };
 use anyhow::anyhow;
 use bytes::Bytes;
 use std::{convert::Infallible, net::SocketAddr, sync::Arc};
-use tower::{util::BoxCloneService, Service, ServiceExt};
+use tower::{
+    util::{BoxLayer, BoxService},
+    Layer, Service, ServiceExt,
+};
 
 mod connection_manager;
 pub use connection_manager::KnownPeers;
@@ -22,6 +23,13 @@ mod wire;
 #[cfg(test)]
 mod tests;
 
+type OutboundRequestLayer = BoxLayer<
+    BoxService<Request<Bytes>, Response<Bytes>, crate::Error>,
+    Request<Bytes>,
+    Response<Bytes>,
+    crate::Error,
+>;
+
 /// A builder for a [`Network`].
 pub struct Builder {
     bind_address: Address,
@@ -30,6 +38,9 @@ pub struct Builder {
 
     /// Ed25519 Private Key
     private_key: Option<[u8; 32]>,
+
+    /// Layer to apply to all outbound requests
+    outbound_request_layer: Option<OutboundRequestLayer>,
 }
 
 impl Builder {
@@ -68,6 +79,22 @@ impl Builder {
         self.private_key(bytes)
     }
 
+    /// Provide an optional [`Layer`] that will be used to wrap all outbound RPCs.
+    ///
+    /// This could be helpful in providing global metrics and logging for all outbound requests
+    pub fn outbound_request_layer<L>(mut self, layer: L) -> Self
+    where
+        L: Layer<BoxService<Request<Bytes>, Response<Bytes>, crate::Error>> + Send + Sync + 'static,
+        L::Service: Service<Request<Bytes>, Response = Response<Bytes>, Error = crate::Error>
+            + Send
+            + 'static,
+        <L::Service as Service<Request<Bytes>>>::Future: Send + 'static,
+    {
+        let layer = BoxLayer::new(layer);
+        self.outbound_request_layer = Some(layer);
+        self
+    }
+
     /// Start a [`Network`] and return a handle to it.
     ///
     /// # Panics
@@ -75,7 +102,7 @@ impl Builder {
     /// This method will panic if:
     /// * not called from within the context of a tokio runtime.
     /// * no `private-key` or `server-name` were set.
-    pub fn start<T>(self, service: T) -> Result<Network>
+    pub fn start<T>(mut self, service: T) -> Result<Network>
     where
         T: Clone + Send + 'static,
         T: Service<Request<Bytes>, Response = Response<Bytes>, Error = Infallible>,
@@ -94,15 +121,7 @@ impl Builder {
         let (endpoint, incoming) = Endpoint::new(endpoint_config, socket)?;
 
         let service = service.boxed_clone();
-        Ok(Self::network_start(endpoint, incoming, service, config))
-    }
 
-    fn network_start(
-        endpoint: Endpoint,
-        incoming: Incoming,
-        service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
-        config: Config,
-    ) -> Network {
         let config = Arc::new(config);
 
         let endpoint = Arc::new(endpoint);
@@ -124,11 +143,12 @@ impl Builder {
             active_peers,
             known_peers,
             connection_manager_handle,
+            outbound_request_layer: self.outbound_request_layer.take(),
         }));
 
         tokio::spawn(connection_manager.start());
 
-        network
+        Ok(network)
     }
 }
 
@@ -147,6 +167,7 @@ impl Network {
             config: None,
             server_name: None,
             private_key: None,
+            outbound_request_layer: None,
         }
     }
 
@@ -213,6 +234,8 @@ struct NetworkInner {
     active_peers: ActivePeers,
     known_peers: KnownPeers,
     connection_manager_handle: tokio::sync::mpsc::Sender<ConnectionManagerRequest>,
+
+    outbound_request_layer: Option<OutboundRequestLayer>,
 }
 
 impl NetworkInner {
@@ -252,7 +275,7 @@ impl NetworkInner {
 
     fn peer(&self, peer_id: PeerId) -> Option<Peer> {
         let connection = self.active_peers.get(&peer_id)?;
-        Some(Peer::new(connection))
+        Some(Peer::new(connection, self.outbound_request_layer.clone()))
     }
 
     async fn rpc(&self, peer_id: PeerId, request: Request<Bytes>) -> Result<Response<Bytes>> {

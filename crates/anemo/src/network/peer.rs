@@ -3,24 +3,35 @@ use crate::{connection::Connection, PeerId, Request, Response, Result};
 use bytes::Bytes;
 use futures::future::BoxFuture;
 use tokio_util::codec::{FramedRead, FramedWrite};
-use tower::Service;
+use tower::{Layer, Service, ServiceExt};
 
 /// Handle to a connection with a remote Peer.
 #[derive(Clone)]
 pub struct Peer {
     connection: Connection,
+    outbound_request_layer: Option<super::OutboundRequestLayer>,
 }
 
 impl Peer {
-    pub(crate) fn new(connection: Connection) -> Self {
-        Self { connection }
+    pub(crate) fn new(
+        connection: Connection,
+        outbound_request_layer: Option<super::OutboundRequestLayer>,
+    ) -> Self {
+        Self {
+            connection,
+            outbound_request_layer,
+        }
     }
 
     pub fn peer_id(&self) -> PeerId {
         self.connection.peer_id()
     }
 
-    pub async fn rpc(&self, request: Request<Bytes>) -> Result<Response<Bytes>> {
+    pub async fn rpc(&mut self, request: Request<Bytes>) -> Result<Response<Bytes>> {
+        self.ready().await?.call(request).await
+    }
+
+    async fn do_rpc(&self, request: Request<Bytes>) -> Result<Response<Bytes>> {
         let (send_stream, recv_stream) = self.connection.open_bi().await?;
         let mut send_stream = FramedWrite::new(send_stream, network_message_frame_codec());
         let mut recv_stream = FramedRead::new(recv_stream, network_message_frame_codec());
@@ -61,6 +72,17 @@ impl Service<Request<Bytes>> for Peer {
     #[inline]
     fn call(&mut self, request: Request<Bytes>) -> Self::Future {
         let peer = self.clone();
-        Box::pin(async move { peer.rpc(request).await })
+        if let Some(layer) = &self.outbound_request_layer {
+            let inner = tower::service_fn(move |request| {
+                let peer = peer.clone();
+                async move { peer.do_rpc(request).await }
+            })
+            .boxed();
+
+            let mut service = layer.layer(inner);
+            service.call(request)
+        } else {
+            Box::pin(async move { peer.do_rpc(request).await })
+        }
     }
 }
