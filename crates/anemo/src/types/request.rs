@@ -160,12 +160,3 @@ impl<T> IntoRequest<T> for Request<T> {
         self
     }
 }
-
-impl<T> IntoRequest<T> for Message<T> {
-    fn into_request(self) -> Request<T> {
-        self.0
-    }
-}
-
-#[derive(Debug)]
-pub struct Message<T>(Request<T>);

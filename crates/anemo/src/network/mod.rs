@@ -269,13 +269,6 @@ impl NetworkInner {
             .rpc(request)
             .await
     }
-
-    // async fn send_message(&self, peer_id: PeerId, message: Request<Bytes>) -> Result<()> {
-    //     self.peer(peer_id)
-    //         .ok_or_else(|| anyhow!("not connected to peer {peer_id}"))?
-    //         .message(message)
-    //         .await
-    // }
 }
 
 // TODO look into providing `NetworkRef` via extention to request handlers

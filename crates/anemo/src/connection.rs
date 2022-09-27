@@ -84,6 +84,7 @@ impl Connection {
     //TODO Today when a SendStream is dropped, it still attempts to re-transmit any data that was
     // previously enqueued. This may be non-ideal for dealing with things like timeouts and we may
     // want to look at explicitly calling Reset on the stream if it is dropped pre-maturely.
+    #[allow(dead_code)]
     pub async fn open_uni(&self) -> Result<SendStream, ConnectionError> {
         self.inner.open_uni().await
     }

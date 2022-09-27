@@ -1,9 +1,5 @@
 use super::wire::{network_message_frame_codec, read_response, write_request};
-use crate::{
-    connection::Connection,
-    types::request::{IntoRequest, Message},
-    PeerId, Request, Response, Result,
-};
+use crate::{connection::Connection, PeerId, Request, Response, Result};
 use bytes::Bytes;
 use futures::future::BoxFuture;
 use tokio_util::codec::{FramedRead, FramedWrite};
@@ -47,20 +43,6 @@ impl Peer {
 
         Ok(response)
     }
-
-    async fn message(&self, message: Message<Bytes>) -> Result<()> {
-        let send_stream = self.connection.open_uni().await?;
-        let mut send_stream = FramedWrite::new(send_stream, network_message_frame_codec());
-
-        //
-        // Write Request
-        //
-
-        write_request(&mut send_stream, message.into_request()).await?;
-        send_stream.get_mut().finish().await?;
-
-        Ok(())
-    }
 }
 
 impl Service<Request<Bytes>> for Peer {
@@ -80,25 +62,5 @@ impl Service<Request<Bytes>> for Peer {
     fn call(&mut self, request: Request<Bytes>) -> Self::Future {
         let peer = self.clone();
         Box::pin(async move { peer.rpc(request).await })
-    }
-}
-
-impl Service<Message<Bytes>> for Peer {
-    type Response = ();
-    type Error = crate::Error;
-    type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
-
-    #[inline]
-    fn poll_ready(
-        &mut self,
-        _: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), Self::Error>> {
-        std::task::Poll::Ready(Ok(()))
-    }
-
-    #[inline]
-    fn call(&mut self, request: Message<Bytes>) -> Self::Future {
-        let peer = self.clone();
-        Box::pin(async move { peer.message(request).await })
     }
 }
