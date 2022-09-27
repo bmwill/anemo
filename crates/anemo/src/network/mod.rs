@@ -139,14 +139,6 @@ impl Builder {
 #[derive(Clone)]
 pub struct Network(Arc<NetworkInner>);
 
-//TODO
-// There might be a chicken and egg problem with setting up components that need network access as
-// well as want to provide a service. One thought would be to split the network building process in
-// two.
-// fn builder() -> (Builder, NetworkHandle)
-//
-// The Network handle could contain a oncecell that is initialized once the builder is finished and
-// until such point, all access results in a Panic.
 impl Network {
     /// Binds to the provided address, and returns a [`Builder`].
     pub fn bind<A: Into<Address>>(addr: A) -> Builder {
