@@ -73,8 +73,18 @@ impl StatusCode {
         self as u16
     }
 
+    #[inline]
     pub fn is_success(self) -> bool {
         matches!(self, StatusCode::Success)
+    }
+
+    /// Check if status is within 500-599.
+    #[inline]
+    pub fn is_server_error(self) -> bool {
+        matches!(
+            self,
+            StatusCode::InternalServerError | StatusCode::VersionNotSupported | StatusCode::Unknown
+        )
     }
 }
 
