@@ -301,9 +301,6 @@ async fn drop_shutdown() -> Result<()> {
 // Test to verify that anemo will perform an early termination of a request handler in the event
 // that the requesting side terminated the RPC prematurely, perhaps due to a timeout.
 #[tokio::test(flavor = "current_thread", start_paused = true)]
-// Today this tests panics because the handler is not eagerly terminated when the remote side has
-// decided to abandon the RPC
-#[should_panic]
 async fn early_termination_of_request_handlers() {
     use std::time::Duration;
     use tokio::sync::mpsc;

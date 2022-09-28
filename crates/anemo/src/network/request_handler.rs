@@ -5,6 +5,8 @@ use super::{
 use crate::{connection::Connection, endpoint::NewConnection, Request, Response, Result};
 use bytes::Bytes;
 use futures::{
+    future::select,
+    future::Either,
     stream::{Fuse, FuturesUnordered},
     StreamExt,
 };
@@ -151,7 +153,16 @@ impl BiStreamRequestHandler {
             .insert(self.connection.remote_address());
 
         // Issue request to configured Service
-        let response = self.service.oneshot(request).await.expect("Infallible");
+        // We also watch the send_stream and see if it has been prematurely terminated by the
+        // remote side indicating that this RPC was canceled.
+        let response = {
+            let handler = self.service.oneshot(request);
+            let stopped = self.send_stream.get_mut().stopped();
+            match select(handler, stopped).await {
+                Either::Left((response, _)) => response.expect("Infallible"),
+                Either::Right(_) => return Err(anyhow::anyhow!("send_stream closed by remote")),
+            }
+        };
 
         //
         // Write Response
