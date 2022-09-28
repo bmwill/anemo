@@ -298,6 +298,71 @@ async fn drop_shutdown() -> Result<()> {
     Ok(())
 }
 
+// Test to verify that anemo will perform an early termination of a request handler in the event
+// that the requesting side terminated the RPC prematurely, perhaps due to a timeout.
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+// Today this tests panics because the handler is not eagerly terminated when the remote side has
+// decided to abandon the RPC
+#[should_panic]
+async fn early_termination_of_request_handlers() {
+    use std::time::Duration;
+    use tokio::sync::mpsc;
+    use tokio::sync::oneshot;
+    use tokio::time::timeout;
+
+    const HANDLER_SLEEP: u64 = 100;
+
+    let _gaurd = crate::init_tracing_for_testing();
+
+    let (sender, mut reciever) = mpsc::channel::<oneshot::Receiver<()>>(1);
+
+    let service = {
+        let handle = move |request: Request<Bytes>| {
+            let sender = sender.clone();
+            async move {
+                let (_sender, reciever) = oneshot::channel();
+                sender.send(reciever).await.unwrap();
+                tokio::time::sleep(Duration::from_secs(HANDLER_SLEEP)).await;
+                let response = Response::new(request.into_body());
+                Result::<Response<Bytes>, Infallible>::Ok(response)
+            }
+        };
+
+        tower::service_fn(handle)
+    };
+
+    let network = Network::bind("localhost:0")
+        .random_private_key()
+        .server_name("test")
+        .start(service)
+        .unwrap();
+
+    let network_2 = build_network().unwrap();
+
+    let peer = network_2.connect(network.local_addr()).await.unwrap();
+
+    let client_fut = async {
+        timeout(
+            Duration::from_secs(1),
+            network_2.rpc(peer, Request::new(Bytes::new())),
+        )
+        .await
+        .unwrap_err();
+    };
+
+    let server_fut = async {
+        use tokio::sync::oneshot::error::TryRecvError;
+
+        let mut reciever = reciever.recv().await.unwrap();
+        assert_eq!(Err(TryRecvError::Empty), reciever.try_recv());
+
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        assert_eq!(Err(TryRecvError::Closed), reciever.try_recv());
+    };
+
+    futures::future::join(client_fut, server_fut).await;
+}
+
 #[tokio::test]
 async fn user_provided_client_service_layer() {
     use std::sync::atomic::AtomicUsize;
