@@ -14,7 +14,7 @@ use quinn::{Datagrams, IncomingBiStreams, IncomingUniStreams, RecvStream, SendSt
 use std::convert::Infallible;
 use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
 use tower::{util::BoxCloneService, ServiceExt};
-use tracing::{info, trace};
+use tracing::{debug, trace};
 
 pub(crate) struct InboundRequestHandler {
     connection: Connection,
@@ -48,7 +48,7 @@ impl InboundRequestHandler {
     }
 
     pub async fn start(mut self) {
-        info!(peer =% self.connection.peer_id(), "InboundRequestHandler started");
+        debug!(peer =% self.connection.peer_id(), "InboundRequestHandler started");
 
         let mut inflight_requests = FuturesUnordered::new();
 
@@ -101,7 +101,7 @@ impl InboundRequestHandler {
             crate::types::DisconnectReason::ConnectionLost,
         );
 
-        info!(peer =% self.connection.peer_id(), "InboundRequestHandler ended");
+        debug!(peer =% self.connection.peer_id(), "InboundRequestHandler ended");
     }
 }
 
