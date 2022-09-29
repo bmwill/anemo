@@ -98,7 +98,16 @@ impl ConnectionManager {
     pub async fn start(mut self) {
         info!("ConnectionManager started");
 
-        let mut interval = tokio::time::interval(self.config.connectivity_check_interval());
+        // Add some jitter to the interval we perform connectivity checks in order to help reduce
+        // the probability of simultaneous dials, especially in non-production environments where
+        // most nodes are spun up around the same time.
+        //
+        // TODO maybe look into adding jitter directly onto the dials themsevles so that dials are
+        // more smeared out over time to avoid spiky load / thundering herd issues where all dial
+        // requests happen around the same time.
+        let jitter = std::time::Duration::from_millis(1_000).mul_f64(rand::random::<f64>());
+        let mut interval =
+            tokio::time::interval(self.config.connectivity_check_interval() + jitter);
 
         loop {
             futures::select! {
