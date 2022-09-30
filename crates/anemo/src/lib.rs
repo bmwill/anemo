@@ -3,6 +3,7 @@ mod connection;
 mod crypto;
 mod endpoint;
 mod error;
+pub mod middleware;
 mod network;
 mod routing;
 pub mod rpc;
