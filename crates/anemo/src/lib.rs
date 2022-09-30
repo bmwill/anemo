@@ -11,7 +11,7 @@ pub mod types;
 
 pub use config::{Config, QuicConfig};
 pub use error::{Error, Result};
-pub use network::{Builder, KnownPeers, Network, Peer};
+pub use network::{Builder, KnownPeers, Network, NetworkRef, Peer};
 pub use routing::Router;
 pub use types::{request::Request, response::Response, ConnectionOrigin, PeerId};
 

@@ -1,6 +1,6 @@
 use crate::{
-    config::EndpointConfig, endpoint::Endpoint, types::Address, Config, PeerId, Request, Response,
-    Result,
+    config::EndpointConfig, endpoint::Endpoint, middleware::add_extension::AddExtension,
+    types::Address, Config, PeerId, Request, Response, Result,
 };
 use anyhow::anyhow;
 use bytes::Bytes;
@@ -120,35 +120,40 @@ impl Builder {
         let socket = std::net::UdpSocket::bind(self.bind_address)?;
         let (endpoint, incoming) = Endpoint::new(endpoint_config, socket)?;
 
-        let service = service.boxed_clone();
-
         let config = Arc::new(config);
 
         let endpoint = Arc::new(endpoint);
         let active_peers = ActivePeers::new(config.peer_event_broadcast_channel_capacity());
         let known_peers = KnownPeers::new();
 
-        let (connection_manager, connection_manager_handle) = ConnectionManager::new(
-            config.clone(),
-            endpoint.clone(),
-            active_peers.clone(),
-            known_peers.clone(),
-            incoming,
-            service,
-        );
+        let inner = Arc::new_cyclic(|weak| {
+            // Use extention layer to apply to all request handlers
+            let network_ref = NetworkRef(weak.clone());
 
-        let network = Network(Arc::new(NetworkInner {
-            _config: config,
-            endpoint,
-            active_peers,
-            known_peers,
-            connection_manager_handle,
-            outbound_request_layer: self.outbound_request_layer.take(),
-        }));
+            let service = AddExtension::new(service, network_ref).boxed_clone();
 
-        tokio::spawn(connection_manager.start());
+            let (connection_manager, connection_manager_handle) = ConnectionManager::new(
+                config.clone(),
+                endpoint.clone(),
+                active_peers.clone(),
+                known_peers.clone(),
+                incoming,
+                service,
+            );
 
-        Ok(network)
+            tokio::spawn(connection_manager.start());
+
+            NetworkInner {
+                _config: config,
+                endpoint,
+                active_peers,
+                known_peers,
+                connection_manager_handle,
+                outbound_request_layer: self.outbound_request_layer.take(),
+            }
+        });
+
+        Ok(Network(inner))
     }
 }
 
@@ -222,8 +227,7 @@ impl Network {
         self.0.peer_id()
     }
 
-    #[cfg(test)]
-    pub(crate) fn downgrade(&self) -> NetworkRef {
+    pub fn downgrade(&self) -> NetworkRef {
         NetworkRef(Arc::downgrade(&self.0))
     }
 }
@@ -286,13 +290,26 @@ impl NetworkInner {
     }
 }
 
-// TODO look into providing `NetworkRef` via extention to request handlers
+/// Weak reference to a [`Network`] handle.
+///
+/// A `NetworkRef` can be obtained either via [`Network::downgrade`] if you have direct access to a
+/// [`Network`] or via the [request extensions] if needed inside of a request handler.
+///
+/// ## Note
+///
+/// Care should be taken to avoid holding on to an upgraded pointer for too long if done from
+/// inside a request handler as holding a Network can prevent the network from properly shutting
+/// down once all other references to the Network, outside the handlers, have been dropped.
+///
+/// [request extensions]: crate::types::Extensions
 #[derive(Clone)]
-#[cfg(test)]
-pub(crate) struct NetworkRef(std::sync::Weak<NetworkInner>);
+pub struct NetworkRef(std::sync::Weak<NetworkInner>);
 
-#[cfg(test)]
 impl NetworkRef {
+    /// Attempts to upgrade this weak reference to a [`Network`] handle, delaying the dropping of
+    /// the network if successful.
+    ///
+    /// Returns [`None`] if the network has already been dropped.
     pub fn upgrade(&self) -> Option<Network> {
         self.0.upgrade().map(Network)
     }

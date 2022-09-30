@@ -1,5 +1,5 @@
-use crate::{Network, Request, Response, Result};
-use bytes::Bytes;
+use crate::{Network, NetworkRef, Request, Response, Result};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 use std::convert::Infallible;
 use tower::{util::BoxCloneService, ServiceExt};
 use tracing::trace;
@@ -454,4 +454,32 @@ async fn user_provided_client_service_layer() {
     assert_eq!(1, client_counter_1.load(Ordering::SeqCst));
     assert_eq!(1, server_counter_2.load(Ordering::SeqCst));
     assert_eq!(1, client_counter_2.load(Ordering::SeqCst));
+}
+
+// Verify that we properly include a `NetworkRef` as an extention to request handlers
+#[tokio::test]
+async fn network_ref_via_extension() -> Result<()> {
+    let svc = tower::service_fn(|req: Request<Bytes>| async move {
+        let network_ref = req.extensions().get::<NetworkRef>().unwrap();
+        let count = network_ref.upgrade().unwrap().peers().len();
+        let mut buf = BytesMut::new();
+        buf.put_u8(count as u8);
+        Ok::<_, Infallible>(Response::new(buf.freeze()))
+    });
+
+    let network_1 = Network::bind("localhost:0")
+        .server_name("test")
+        .random_private_key()
+        .start(svc)?;
+    let network_2 = build_network()?;
+
+    let peer = network_2.connect(network_1.local_addr()).await?;
+    let mut response = network_2
+        .rpc(peer, Request::new(Bytes::new()))
+        .await?
+        .into_inner();
+
+    assert_eq!(1, response.get_u8());
+
+    Ok(())
 }
