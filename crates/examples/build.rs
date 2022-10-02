@@ -1,7 +1,7 @@
 fn main() {
     let greeter_service = anemo_build::manual::Service::builder()
         .name("Greeter")
-        .package("json.helloworld")
+        .package("example.helloworld")
         .method(
             anemo_build::manual::Method::builder()
                 .name("say_hello")
@@ -10,16 +10,6 @@ fn main() {
                 .response_type("crate::HelloResponse")
                 .codec_path("anemo::rpc::codec::BincodeCodec")
                 // .codec_path("anemo::rpc::codec::JsonCodec")
-                .build(),
-        )
-        .method(
-            anemo_build::manual::Method::builder()
-                .name("say_hello_2")
-                .route_name("SayHello2")
-                .request_type("crate::HelloRequest")
-                .response_type("()")
-                // .codec_path("anemo::rpc::codec::BincodeCodec")
-                .codec_path("anemo::rpc::codec::JsonCodec")
                 .build(),
         )
         .build();

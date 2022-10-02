@@ -1,13 +1,14 @@
-use greeter::{greeter_client::GreeterClient, greeter_server::Greeter};
+use anemo::types::PeerEvent;
+use anemo::{rpc::Status, Network, Request, Response};
+use anemo_tower::trace::TraceLayer;
 use serde::{Deserialize, Serialize};
+use tracing::info;
 
-pub use anemo::rpc::codec::JsonCodec;
-use anemo::{rpc::Status, Network, Request, Response, Router};
-
-use crate::greeter::greeter_server::GreeterServer;
-
+use greeter::greeter_client::GreeterClient;
+use greeter::greeter_server::Greeter;
+use greeter::greeter_server::GreeterServer;
 mod greeter {
-    include!(concat!(env!("OUT_DIR"), "/json.helloworld.Greeter.rs"));
+    include!(concat!(env!("OUT_DIR"), "/example.helloworld.Greeter.rs"));
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -23,75 +24,96 @@ pub struct HelloResponse {
 #[derive(Default)]
 pub struct MyGreeter {}
 
-#[anemo::codegen::async_trait]
+#[anemo::async_trait]
 impl Greeter for MyGreeter {
     async fn say_hello(
         &self,
         request: Request<HelloRequest>,
     ) -> Result<Response<HelloResponse>, Status> {
-        println!("Got a request from {:?}", request.peer_id());
+        info!(
+            "Got a request from {}",
+            request.peer_id().unwrap().short_display(4)
+        );
 
         let reply = HelloResponse {
             message: format!("Hello {}!", request.into_body().name),
         };
         Ok(Response::new(reply))
     }
-
-    async fn say_hello_2(&self, request: Request<HelloRequest>) -> Result<Response<()>, Status> {
-        println!("Got a request from {:?}", request.peer_id());
-
-        Ok(Response::new(()))
-    }
 }
 
 #[tokio::main]
 async fn main() {
-    let mut rng = rand::thread_rng();
+    tracing_subscriber::fmt::init();
+
     let network_1 = Network::bind("localhost:0")
-        .private_key({
-            let mut bytes = [0u8; 32];
-            rand::RngCore::fill_bytes(&mut rng, &mut bytes[..]);
-            bytes
-        })
+        .private_key(random_key())
         .server_name("test")
-        .start(Router::new().add_rpc_service(GreeterServer::new(MyGreeter::default())))
+        .start(GreeterServer::new(MyGreeter::default()))
         .unwrap();
 
     let network_2 = Network::bind("localhost:0")
-        .private_key({
-            let mut bytes = [0u8; 32];
-            rand::RngCore::fill_bytes(&mut rng, &mut bytes[..]);
-            bytes
-        })
+        .private_key(random_key())
         .server_name("test")
-        .start(Router::new().add_rpc_service(GreeterServer::new(MyGreeter::default())))
+        .outbound_request_layer(TraceLayer::new())
+        .start(GreeterServer::new(MyGreeter::default()))
         .unwrap();
 
-    let peer = network_1.connect(network_2.local_addr()).await.unwrap();
+    let network_2_addr = network_2.local_addr();
+
+    let handle = tokio::spawn(async move {
+        let (mut reciever, mut peers) = network_2.subscribe();
+
+        let peer_id = {
+            if peers.is_empty() {
+                match reciever.recv().await.unwrap() {
+                    PeerEvent::NewPeer(peer_id) => peer_id,
+                    PeerEvent::LostPeer(_, _) => todo!(),
+                }
+            } else {
+                peers.pop().unwrap()
+            }
+        };
+
+        let peer = network_2.peer(peer_id).unwrap();
+        let client = GreeterClient::new(peer);
+
+        let mut handles = Vec::new();
+        for i in 0..2 {
+            let mut client = client.clone();
+            handles.push(async move {
+                client
+                    .say_hello(HelloRequest {
+                        name: i.to_string(),
+                    })
+                    .await
+                    .unwrap()
+                    .into_inner()
+            });
+        }
+
+        info!("{:#?}", futures::future::join_all(handles).await);
+    });
+
+    let peer = network_1.connect(network_2_addr).await.unwrap();
 
     let peer = network_1.peer(peer).unwrap();
     let mut client = GreeterClient::new(peer);
-    dbg!(client
+    let response = client
         .say_hello(HelloRequest {
-            name: "Brandon".into()
+            name: "Brandon".into(),
         })
         .await
-        .unwrap());
+        .unwrap();
 
-    let peer = network_2.peer(network_1.peer_id()).unwrap();
-    let client = GreeterClient::new(peer);
+    info!("{:#?}", response);
 
-    let mut handles = Vec::new();
-    for _ in 0..50 {
-        let mut client = client.clone();
-        handles.push(async move {
-            client
-                .say_hello_2(HelloRequest {
-                    name: "Ledger".into(),
-                })
-                .await
-        });
-    }
+    handle.await.unwrap();
+}
 
-    dbg!(futures::future::join_all(handles).await);
+fn random_key() -> [u8; 32] {
+    let mut rng = rand::thread_rng();
+    let mut bytes = [0u8; 32];
+    rand::RngCore::fill_bytes(&mut rng, &mut bytes[..]);
+    bytes
 }
