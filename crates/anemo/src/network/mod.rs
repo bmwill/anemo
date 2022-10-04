@@ -1,13 +1,16 @@
 use crate::{
-    config::EndpointConfig, endpoint::Endpoint, middleware::add_extension::AddExtension,
-    types::Address, Config, PeerId, Request, Response, Result,
+    config::EndpointConfig,
+    endpoint::Endpoint,
+    middleware::{add_extension::AddExtension, timeout::Timeout},
+    types::Address,
+    Config, PeerId, Request, Response, Result,
 };
 use anyhow::anyhow;
 use bytes::Bytes;
 use std::{convert::Infallible, net::SocketAddr, sync::Arc};
 use tower::{
     util::{BoxLayer, BoxService},
-    Layer, Service, ServiceExt,
+    Layer, Service, ServiceBuilder, ServiceExt,
 };
 
 mod connection_manager;
@@ -126,6 +129,18 @@ impl Builder {
         let active_peers = ActivePeers::new(config.peer_event_broadcast_channel_capacity());
         let known_peers = KnownPeers::new();
 
+        // Build the Outbound Request Layer
+        let outbound_request_layer = {
+            let outbout_request_timeout = config.outbound_request_timeout();
+            let builder =
+                ServiceBuilder::new().layer_fn(move |s| Timeout::new(s, outbout_request_timeout));
+            if let Some(layer) = self.outbound_request_layer.take() {
+                BoxLayer::new(builder.layer(layer).into_inner())
+            } else {
+                BoxLayer::new(builder.into_inner())
+            }
+        };
+
         let inner = Arc::new_cyclic(|weak| {
             // Use extention layer to apply to all request handlers
             let network_ref = NetworkRef(weak.clone());
@@ -149,7 +164,7 @@ impl Builder {
                 active_peers,
                 known_peers,
                 connection_manager_handle,
-                outbound_request_layer: self.outbound_request_layer.take(),
+                outbound_request_layer,
             }
         });
 
@@ -239,7 +254,7 @@ struct NetworkInner {
     known_peers: KnownPeers,
     connection_manager_handle: tokio::sync::mpsc::Sender<ConnectionManagerRequest>,
 
-    outbound_request_layer: Option<OutboundRequestLayer>,
+    outbound_request_layer: OutboundRequestLayer,
 }
 
 impl NetworkInner {

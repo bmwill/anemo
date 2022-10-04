@@ -38,6 +38,8 @@ pub type HeaderMap = std::collections::HashMap<String, String>;
 pub mod header {
     pub const CONTENT_TYPE: &str = "content-type";
     pub const STATUS_MESSAGE: &str = "status-message";
+    /// Timeout in nanoseconds, encoded as an u64
+    pub const TIMEOUT: &str = "timeout";
 }
 
 #[derive(Clone, Copy, Debug)]

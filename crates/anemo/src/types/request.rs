@@ -142,6 +142,59 @@ impl<T> Request<T> {
             head: self.head,
         }
     }
+
+    /// Set the max duration the request is allowed to take.
+    ///
+    /// The duration will be formatted as nanoseconds as an [`u64`] in the
+    /// [`TIMEOUT`](super::header::TIMEOUT) header.
+    ///
+    /// Example:
+    ///
+    /// ```rust
+    /// use std::time::Duration;
+    /// use anemo::Request;
+    ///
+    /// let mut request = Request::new(());
+    ///
+    /// request.set_timeout(Duration::from_secs(30));
+    ///
+    /// let value = request.headers().get("timeout").unwrap();
+    ///
+    /// assert_eq!(
+    ///     value,
+    ///     &Duration::from_secs(30).as_nanos().to_string(),
+    /// );
+    /// ```
+    pub fn set_timeout(&mut self, timeout: std::time::Duration) {
+        let timeout = crate::middleware::timeout::duration_to_timeout(timeout);
+        self.headers_mut()
+            .insert(super::header::TIMEOUT.into(), timeout);
+    }
+
+    /// Set the max duration the request is allowed to take.
+    ///
+    /// The duration will be formatted as nanoseconds as an [`u64`] in the
+    /// [`TIMEOUT`](super::header::TIMEOUT) header.
+    ///
+    /// Example:
+    ///
+    /// ```rust
+    /// use std::time::Duration;
+    /// use anemo::Request;
+    ///
+    /// let request = Request::new(()).with_timeout(Duration::from_secs(30));
+    ///
+    /// let value = request.headers().get("timeout").unwrap();
+    ///
+    /// assert_eq!(
+    ///     value,
+    ///     &Duration::from_secs(30).as_nanos().to_string(),
+    /// );
+    /// ```
+    pub fn with_timeout(mut self, timeout: std::time::Duration) -> Self {
+        self.set_timeout(timeout);
+        self
+    }
 }
 
 pub trait IntoRequest<T> {

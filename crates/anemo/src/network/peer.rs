@@ -1,4 +1,5 @@
 use super::wire::{network_message_frame_codec, read_response, write_request};
+use super::OutboundRequestLayer;
 use crate::{connection::Connection, PeerId, Request, Response, Result};
 use bytes::Bytes;
 use futures::future::BoxFuture;
@@ -9,13 +10,13 @@ use tower::{Layer, Service, ServiceExt};
 #[derive(Clone)]
 pub struct Peer {
     connection: Connection,
-    outbound_request_layer: Option<super::OutboundRequestLayer>,
+    outbound_request_layer: OutboundRequestLayer,
 }
 
 impl Peer {
     pub(crate) fn new(
         connection: Connection,
-        outbound_request_layer: Option<super::OutboundRequestLayer>,
+        outbound_request_layer: OutboundRequestLayer,
     ) -> Self {
         Self {
             connection,
@@ -72,17 +73,13 @@ impl Service<Request<Bytes>> for Peer {
     #[inline]
     fn call(&mut self, request: Request<Bytes>) -> Self::Future {
         let peer = self.clone();
-        if let Some(layer) = &self.outbound_request_layer {
-            let inner = tower::service_fn(move |request| {
-                let peer = peer.clone();
-                async move { peer.do_rpc(request).await }
-            })
-            .boxed();
+        let inner = tower::service_fn(move |request| {
+            let peer = peer.clone();
+            async move { peer.do_rpc(request).await }
+        })
+        .boxed();
 
-            let mut service = layer.layer(inner);
-            service.call(request)
-        } else {
-            Box::pin(async move { peer.do_rpc(request).await })
-        }
+        let mut service = self.outbound_request_layer.layer(inner);
+        service.call(request)
     }
 }

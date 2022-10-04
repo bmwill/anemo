@@ -58,8 +58,14 @@ pub struct Config {
     /// If unspecified, this will default to `128`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub peer_event_broadcast_channel_capacity: Option<usize>,
+
     // TODO enable configuring of max frame size
     // max_frame_size: Option<usize>,
+    /// Set a timeout, in milliseconds, for all outbound requests.
+    ///
+    /// In unspecified, no default timeout will be configured.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub outbound_request_timeout_ms: Option<u64>,
 }
 
 /// Configuration for the underlying QUIC transport.
@@ -162,6 +168,10 @@ impl Config {
 
         // self.max_frame_size.unwrap_or(MAX_FRAME_SIZE)
         MAX_FRAME_SIZE
+    }
+
+    pub(crate) fn outbound_request_timeout(&self) -> Option<Duration> {
+        self.outbound_request_timeout_ms.map(Duration::from_millis)
     }
 }
 
