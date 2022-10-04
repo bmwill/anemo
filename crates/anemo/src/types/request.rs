@@ -80,6 +80,11 @@ impl<T> Request<T> {
         &mut self.head.route
     }
 
+    pub fn with_route<R: Into<String>>(mut self, route: R) -> Self {
+        self.head.route = route.into();
+        self
+    }
+
     pub fn version(&self) -> Version {
         self.head.version
     }
