@@ -61,7 +61,20 @@ pub struct Config {
 
     // TODO enable configuring of max frame size
     // max_frame_size: Option<usize>,
+    /// Set a timeout, in milliseconds, for all inbound requests.
+    ///
+    /// When an inbound timeout is hit when processing a request a Response is sent to the
+    /// requestor with a [`StatusCode::RequestTimeout`] status code.
+    ///
+    /// In unspecified, no default timeout will be configured.
+    ///
+    /// [`StatusCode::RequestTimeout`]: crate::types::response::StatusCode
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub inbound_request_timeout_ms: Option<u64>,
+
     /// Set a timeout, in milliseconds, for all outbound requests.
+    ///
+    /// When an outbound timeout is hit a timeout error will be returned.
     ///
     /// In unspecified, no default timeout will be configured.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -168,6 +181,10 @@ impl Config {
 
         // self.max_frame_size.unwrap_or(MAX_FRAME_SIZE)
         MAX_FRAME_SIZE
+    }
+
+    pub(crate) fn inbound_request_timeout(&self) -> Option<Duration> {
+        self.inbound_request_timeout_ms.map(Duration::from_millis)
     }
 
     pub(crate) fn outbound_request_timeout(&self) -> Option<Duration> {

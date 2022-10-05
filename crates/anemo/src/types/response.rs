@@ -51,6 +51,7 @@ pub enum StatusCode {
     Success = 200,
     BadRequest = 400,
     NotFound = 404,
+    RequestTimeout = 408,
     InternalServerError = 500,
     VersionNotSupported = 505,
     Unknown = 520,
@@ -120,6 +121,11 @@ impl<T> Response<T> {
 
     pub fn status_mut(&mut self) -> &mut StatusCode {
         &mut self.head.status
+    }
+
+    pub fn with_status(mut self, status: StatusCode) -> Self {
+        self.head.status = status;
+        self
     }
 
     pub fn version(&self) -> Version {

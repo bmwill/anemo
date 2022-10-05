@@ -1,7 +1,7 @@
 use crate::{
     config::EndpointConfig,
     endpoint::Endpoint,
-    middleware::{add_extension::AddExtension, timeout::Timeout},
+    middleware::{add_extension::AddExtensionLayer, timeout},
     types::Address,
     Config, PeerId, Request, Response, Result,
 };
@@ -131,9 +131,11 @@ impl Builder {
 
         // Build the Outbound Request Layer
         let outbound_request_layer = {
-            let outbout_request_timeout = config.outbound_request_timeout();
-            let builder =
-                ServiceBuilder::new().layer_fn(move |s| Timeout::new(s, outbout_request_timeout));
+            let builder = ServiceBuilder::new()
+                // Support timeouts for outbound requests
+                .layer(timeout::outbound::TimeoutLayer::new(
+                    config.outbound_request_timeout(),
+                ));
             if let Some(layer) = self.outbound_request_layer.take() {
                 BoxLayer::new(builder.layer(layer).into_inner())
             } else {
@@ -142,10 +144,15 @@ impl Builder {
         };
 
         let inner = Arc::new_cyclic(|weak| {
-            // Use extention layer to apply to all request handlers
-            let network_ref = NetworkRef(weak.clone());
-
-            let service = AddExtension::new(service, network_ref).boxed_clone();
+            let service = ServiceBuilder::new()
+                // Support timeouts for inbound requests
+                .layer(timeout::inbound::TimeoutLayer::new(
+                    config.inbound_request_timeout(),
+                ))
+                // Supply a weak reference to the network via an Extension
+                .layer(AddExtensionLayer::new(NetworkRef(weak.clone())))
+                .service(service)
+                .boxed_clone();
 
             let (connection_manager, connection_manager_handle) = ConnectionManager::new(
                 config.clone(),

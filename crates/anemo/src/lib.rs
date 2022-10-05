@@ -13,6 +13,7 @@ pub use config::{Config, QuicConfig};
 pub use error::{Error, Result};
 pub use network::{Builder, KnownPeers, Network, NetworkRef, Peer};
 pub use routing::Router;
+#[doc(inline)]
 pub use types::{request::Request, response::Response, ConnectionOrigin, PeerId};
 
 pub use async_trait::async_trait;
