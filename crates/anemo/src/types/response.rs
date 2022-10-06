@@ -47,6 +47,7 @@ impl RawResponseHeader {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u16)]
+#[non_exhaustive]
 pub enum StatusCode {
     Success = 200,
     BadRequest = 400,
@@ -58,39 +59,44 @@ pub enum StatusCode {
 }
 
 impl StatusCode {
-    pub fn new(code: u16) -> Result<Self> {
+    pub fn new(code: u16) -> Result<Self, InvalidStatusCodeError> {
+        use StatusCode::*;
+
         let status = match code {
-            200 => Self::Success,
-            400 => Self::BadRequest,
-            500 => Self::InternalServerError,
-            505 => Self::VersionNotSupported,
-            _ => return Err(anyhow::anyhow!("invalid StatusCode {}", code)),
+            200 => Success,
+            400 => BadRequest,
+            404 => NotFound,
+            408 => RequestTimeout,
+            500 => InternalServerError,
+            505 => VersionNotSupported,
+            520 => Unknown,
+            _ => return Err(InvalidStatusCodeError(code)),
         };
 
         Ok(status)
     }
 
+    #[inline]
     pub fn to_u16(self) -> u16 {
         self as u16
     }
 
+    /// Check if status is within 200-299.
     #[inline]
     pub fn is_success(self) -> bool {
-        matches!(self, StatusCode::Success)
+        200 <= self.to_u16() && self.to_u16() <= 299
     }
 
+    /// Check if status is within 400-499.
     #[inline]
     pub fn is_client_error(self) -> bool {
-        matches!(self, StatusCode::BadRequest | StatusCode::NotFound)
+        400 <= self.to_u16() && self.to_u16() <= 499
     }
 
     /// Check if status is within 500-599.
     #[inline]
     pub fn is_server_error(self) -> bool {
-        matches!(
-            self,
-            StatusCode::InternalServerError | StatusCode::VersionNotSupported | StatusCode::Unknown
-        )
+        500 <= self.to_u16() && self.to_u16() <= 599
     }
 }
 
@@ -99,6 +105,17 @@ impl Default for StatusCode {
         Self::Success
     }
 }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct InvalidStatusCodeError(u16);
+
+impl std::fmt::Display for InvalidStatusCodeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "invalid StatusCode {}", self.0)
+    }
+}
+
+impl std::error::Error for InvalidStatusCodeError {}
 
 #[derive(Debug)]
 pub struct Response<T> {
@@ -208,5 +225,40 @@ impl IntoResponse for StatusCode {
 impl IntoResponse for () {
     fn into_response(self) -> Response<bytes::Bytes> {
         Response::new(bytes::Bytes::new())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    #[test]
+    fn all_status_code_variants_are_returned_from_new() {
+        use super::StatusCode;
+        use super::StatusCode::*;
+
+        macro_rules! ensure_mapping {
+            ($($variant:path),+ $(,)?) => {
+                // assert that the given variants round-trip properly
+                $(assert_eq!(StatusCode::new($variant.to_u16()), Ok($variant));)+
+
+                // this generated fn will never be called but will produce a
+                // non-exhaustive pattern error if you've missed a variant
+                #[allow(dead_code)]
+                fn check_all_covered(code: StatusCode) {
+                    match code {
+                        $($variant => {})+
+                    };
+                }
+            }
+        }
+
+        ensure_mapping![
+            Success,
+            BadRequest,
+            NotFound,
+            RequestTimeout,
+            InternalServerError,
+            VersionNotSupported,
+            Unknown,
+        ];
     }
 }
