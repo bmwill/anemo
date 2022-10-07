@@ -26,7 +26,7 @@
 //! }
 //! ```
 
-use super::{client, server};
+use super::{client, server, Attributes};
 use proc_macro2::TokenStream;
 use quote::ToTokens;
 use std::{
@@ -59,6 +59,8 @@ pub struct ServiceBuilder {
     comments: Vec<String>,
     /// The service methods.
     methods: Vec<Method>,
+    /// Attributes to apply to generated code.
+    attributes: Attributes,
 }
 
 impl ServiceBuilder {
@@ -93,6 +95,12 @@ impl ServiceBuilder {
         self
     }
 
+    /// Adds Attributes which should be applied to items in the generated code.
+    pub fn attributes(mut self, attributes: Attributes) -> Self {
+        self.attributes = attributes;
+        self
+    }
+
     /// Build a Service.
     ///
     /// Panics if `name` wasn't set.
@@ -102,6 +110,7 @@ impl ServiceBuilder {
             comments: self.comments,
             package: self.package.unwrap_or_default(),
             methods: self.methods,
+            attributes: self.attributes,
         }
     }
 }
@@ -117,6 +126,8 @@ pub struct Service {
     comments: Vec<String>,
     /// The service methods.
     methods: Vec<Method>,
+    /// Attributes to apply to generated code.
+    attributes: Attributes,
 }
 
 impl Service {
@@ -143,6 +154,10 @@ impl Service {
 
     pub fn comment(&self) -> &[String] {
         &self.comments
+    }
+
+    pub fn attributes(&self) -> &Attributes {
+        &self.attributes
     }
 }
 

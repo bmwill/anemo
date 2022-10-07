@@ -18,7 +18,6 @@ pub fn generate(service: &Service) -> TokenStream {
     let generated_trait = generate_trait(service, server_trait.clone());
     let service_doc = generate_doc_comments(service.comment());
     let package = service.package();
-    // Transport based implementations
     let path = format!(
         "{}{}{}",
         package,
@@ -104,9 +103,11 @@ fn generate_trait(service: &Service, server_trait: Ident) -> TokenStream {
         "Generated trait containing RPC methods that should be implemented for use with {}Server.",
         service.name()
     ));
+    let trait_attributes = service.attributes().for_trait(service.name());
 
     quote! {
         #trait_doc
+        #(#trait_attributes)*
         #[async_trait]
         pub trait #server_trait : Send + Sync + 'static {
             #methods

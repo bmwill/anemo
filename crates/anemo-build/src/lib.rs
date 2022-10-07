@@ -51,6 +51,75 @@ fn naive_snake_case(name: &str) -> String {
     s
 }
 
+/// Attributes that will be added generated code.
+#[derive(Debug, Default, Clone)]
+pub struct Attributes {
+    /// `trait` attributes
+    trait_: Vec<(String, String)>,
+}
+
+impl Attributes {
+    fn for_trait(&self, name: &str) -> Vec<syn::Attribute> {
+        generate_attributes(name, &self.trait_)
+    }
+
+    /// Add an attribute that will be added to `trait` items matching the given pattern.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use anemo_build::*;
+    /// let mut attributes = Attributes::default();
+    /// attributes.push_trait("Greeter", r#"#[mockall::automock]"#);
+    /// ```
+    pub fn push_trait(&mut self, pattern: impl Into<String>, attr: impl Into<String>) {
+        self.trait_.push((pattern.into(), attr.into()));
+    }
+}
+
+// Generates attributes given a list of (`pattern`, `attribute`) pairs. If `pattern` matches `name`, `attribute` will be included.
+fn generate_attributes<'a>(
+    name: &str,
+    attrs: impl IntoIterator<Item = &'a (String, String)>,
+) -> Vec<syn::Attribute> {
+    attrs
+        .into_iter()
+        .filter(|(matcher, _)| match_name(matcher, name))
+        .flat_map(|(_, attr)| {
+            // attributes cannot be parsed directly, so we pretend they're on a struct
+            syn::parse_str::<syn::DeriveInput>(&format!("{}\nstruct fake;", attr))
+                .unwrap()
+                .attrs
+        })
+        .collect::<Vec<_>>()
+}
+
+// Checks whether a path pattern matches a given path.
+pub(crate) fn match_name(pattern: &str, path: &str) -> bool {
+    if pattern.is_empty() {
+        false
+    } else if pattern == "." || pattern == path {
+        true
+    } else {
+        let pattern_segments = pattern.split('.').collect::<Vec<_>>();
+        let path_segments = path.split('.').collect::<Vec<_>>();
+
+        if &pattern[..1] == "." {
+            // prefix match
+            if pattern_segments.len() > path_segments.len() {
+                false
+            } else {
+                pattern_segments[..] == path_segments[..pattern_segments.len()]
+            }
+        // suffix match
+        } else if pattern_segments.len() > path_segments.len() {
+            false
+        } else {
+            pattern_segments[..] == path_segments[path_segments.len() - pattern_segments.len()..]
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -65,5 +134,27 @@ mod tests {
         ] {
             assert_eq!(naive_snake_case(case.0), case.1)
         }
+    }
+
+    #[test]
+    fn test_match_name() {
+        assert!(match_name(".", "Greeter"));
+        assert!(match_name(".", ".my.protos"));
+        assert!(match_name(".", ".protos"));
+
+        assert!(match_name(".my", ".my"));
+        assert!(match_name(".my", ".my.protos"));
+        assert!(match_name(".my.protos.Service", ".my.protos.Service"));
+
+        assert!(match_name("Service", ".my.protos.Service"));
+
+        assert!(!match_name(".m", ".my.protos"));
+        assert!(!match_name(".p", ".protos"));
+
+        assert!(!match_name(".my", ".myy"));
+        assert!(!match_name(".protos", ".my.protos"));
+        assert!(!match_name(".Service", ".my.protos.Service"));
+
+        assert!(!match_name("service", ".my.protos.Service"));
     }
 }
