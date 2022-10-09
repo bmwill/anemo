@@ -106,6 +106,23 @@ impl Default for StatusCode {
     }
 }
 
+impl std::fmt::Display for StatusCode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use StatusCode::*;
+
+        write!(f, "{} ", self.to_u16())?;
+        match self {
+            Success => f.write_str("Success"),
+            BadRequest => f.write_str("Bad Request"),
+            NotFound => f.write_str("Not Found"),
+            RequestTimeout => f.write_str("Request Timeout"),
+            InternalServerError => f.write_str("Internal Server Error"),
+            VersionNotSupported => f.write_str("Version Not Supported"),
+            Unknown => f.write_str("Unknown"),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct InvalidStatusCodeError(u16);
 
