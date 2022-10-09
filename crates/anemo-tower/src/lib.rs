@@ -1,4 +1,5 @@
 pub mod callback;
+pub mod classify;
 pub mod trace;
 
 /// The latency unit used to report latencies by middleware.

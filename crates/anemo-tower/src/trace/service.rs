@@ -1,3 +1,5 @@
+use crate::classify::Classifier;
+
 use super::{
     DefaultMakeSpan, DefaultOnFailure, DefaultOnRequest, DefaultOnResponse, MakeSpan, OnFailure,
     OnRequest, OnResponse, ResponseFuture, TraceLayer,
@@ -19,23 +21,29 @@ use tower::Service;
 #[derive(Debug, Clone, Copy)]
 pub struct Trace<
     S,
+    Classifier,
     MakeSpan = DefaultMakeSpan,
     OnRequest = DefaultOnRequest,
     OnResponse = DefaultOnResponse,
     OnFailure = DefaultOnFailure,
 > {
     pub(crate) inner: S,
+    pub(crate) classifier: Classifier,
     pub(crate) make_span: MakeSpan,
     pub(crate) on_request: OnRequest,
     pub(crate) on_response: OnResponse,
     pub(crate) on_failure: OnFailure,
 }
 
-impl<S> Trace<S> {
+impl<S, C> Trace<S, C> {
     /// Create a new [`Trace`].
-    pub fn new(inner: S) -> Self {
+    pub fn new(inner: S, classifier: C) -> Self
+    where
+        C: Classifier,
+    {
         Self {
             inner,
+            classifier,
             make_span: DefaultMakeSpan::new(),
             on_request: DefaultOnRequest::default(),
             on_response: DefaultOnResponse::default(),
@@ -46,13 +54,16 @@ impl<S> Trace<S> {
     /// Returns a new [`Layer`] that wraps services with a [`TraceLayer`] middleware.
     ///
     /// [`Layer`]: tower::layer::Layer
-    pub fn layer() -> TraceLayer {
-        TraceLayer::new()
+    pub fn layer(classifier: C) -> TraceLayer<C>
+    where
+        C: Classifier,
+    {
+        TraceLayer::new(classifier)
     }
 }
 
-impl<S, MakeSpan, OnRequest, OnResponse, OnFailure>
-    Trace<S, MakeSpan, OnRequest, OnResponse, OnFailure>
+impl<S, Classifier, MakeSpan, OnRequest, OnResponse, OnFailure>
+    Trace<S, Classifier, MakeSpan, OnRequest, OnResponse, OnFailure>
 {
     /// Gets a reference to the underlying service.
     pub fn get_ref(&self) -> &S {
@@ -77,13 +88,14 @@ impl<S, MakeSpan, OnRequest, OnResponse, OnFailure>
     pub fn on_request<NewOnRequest>(
         self,
         new_on_request: NewOnRequest,
-    ) -> Trace<S, MakeSpan, NewOnRequest, OnResponse, OnFailure> {
+    ) -> Trace<S, Classifier, MakeSpan, NewOnRequest, OnResponse, OnFailure> {
         Trace {
-            on_request: new_on_request,
             inner: self.inner,
-            on_failure: self.on_failure,
+            classifier: self.classifier,
             make_span: self.make_span,
+            on_request: new_on_request,
             on_response: self.on_response,
+            on_failure: self.on_failure,
         }
     }
 
@@ -95,13 +107,14 @@ impl<S, MakeSpan, OnRequest, OnResponse, OnFailure>
     pub fn on_response<NewOnResponse>(
         self,
         new_on_response: NewOnResponse,
-    ) -> Trace<S, MakeSpan, OnRequest, NewOnResponse, OnFailure> {
+    ) -> Trace<S, Classifier, MakeSpan, OnRequest, NewOnResponse, OnFailure> {
         Trace {
-            on_response: new_on_response,
             inner: self.inner,
-            on_request: self.on_request,
-            on_failure: self.on_failure,
+            classifier: self.classifier,
             make_span: self.make_span,
+            on_request: self.on_request,
+            on_response: new_on_response,
+            on_failure: self.on_failure,
         }
     }
 
@@ -113,13 +126,14 @@ impl<S, MakeSpan, OnRequest, OnResponse, OnFailure>
     pub fn on_failure<NewOnFailure>(
         self,
         new_on_failure: NewOnFailure,
-    ) -> Trace<S, MakeSpan, OnRequest, OnResponse, NewOnFailure> {
+    ) -> Trace<S, Classifier, MakeSpan, OnRequest, OnResponse, NewOnFailure> {
         Trace {
-            on_failure: new_on_failure,
             inner: self.inner,
+            classifier: self.classifier,
             make_span: self.make_span,
             on_request: self.on_request,
             on_response: self.on_response,
+            on_failure: new_on_failure,
         }
     }
 
@@ -132,30 +146,32 @@ impl<S, MakeSpan, OnRequest, OnResponse, OnFailure>
     pub fn make_span_with<NewMakeSpan>(
         self,
         new_make_span: NewMakeSpan,
-    ) -> Trace<S, NewMakeSpan, OnRequest, OnResponse, OnFailure> {
+    ) -> Trace<S, Classifier, NewMakeSpan, OnRequest, OnResponse, OnFailure> {
         Trace {
-            make_span: new_make_span,
             inner: self.inner,
-            on_failure: self.on_failure,
+            classifier: self.classifier,
+            make_span: new_make_span,
             on_request: self.on_request,
             on_response: self.on_response,
+            on_failure: self.on_failure,
         }
     }
 }
 
-impl<S, OnRequestT, OnResponseT, OnFailureT, MakeSpanT> Service<Request<Bytes>>
-    for Trace<S, MakeSpanT, OnRequestT, OnResponseT, OnFailureT>
+impl<S, ClassifierT, OnRequestT, OnResponseT, OnFailureT, MakeSpanT> Service<Request<Bytes>>
+    for Trace<S, ClassifierT, MakeSpanT, OnRequestT, OnResponseT, OnFailureT>
 where
     S: Service<Request<Bytes>, Response = Response<Bytes>>,
     S::Error: std::fmt::Display + 'static,
+    ClassifierT: Classifier + Clone,
     MakeSpanT: MakeSpan,
     OnRequestT: OnRequest,
     OnResponseT: OnResponse + Clone,
-    OnFailureT: OnFailure + Clone,
+    OnFailureT: OnFailure<ClassifierT::FailureClass> + Clone,
 {
     type Response = Response<Bytes>;
     type Error = S::Error;
-    type Future = ResponseFuture<S::Future, OnResponseT, OnFailureT>;
+    type Future = ResponseFuture<S::Future, ClassifierT, OnResponseT, OnFailureT>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.inner.poll_ready(cx)
@@ -174,6 +190,7 @@ where
 
         ResponseFuture {
             inner: future,
+            classifier: Some(self.classifier.clone()),
             span,
             on_response: Some(self.on_response.clone()),
             on_failure: Some(self.on_failure.clone()),

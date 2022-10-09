@@ -1,4 +1,5 @@
 use super::{OnFailure, OnResponse};
+use crate::classify::Classifier;
 use anemo::Response;
 use bytes::Bytes;
 use pin_project_lite::pin_project;
@@ -14,9 +15,10 @@ pin_project! {
     /// Response future for [`Trace`].
     ///
     /// [`Trace`]: super::Trace
-    pub struct ResponseFuture<F, OnResponse, OnFailure> {
+    pub struct ResponseFuture<F, Classifier, OnResponse, OnFailure> {
         #[pin]
         pub(crate) inner: F,
+        pub(crate) classifier: Option<Classifier>,
         pub(crate) span: Span,
         pub(crate) on_response: Option<OnResponse>,
         pub(crate) on_failure: Option<OnFailure>,
@@ -24,12 +26,14 @@ pin_project! {
     }
 }
 
-impl<Fut, E, OnResponseT, OnFailureT> Future for ResponseFuture<Fut, OnResponseT, OnFailureT>
+impl<Fut, E, ClassifierT, OnResponseT, OnFailureT> Future
+    for ResponseFuture<Fut, ClassifierT, OnResponseT, OnFailureT>
 where
     Fut: Future<Output = Result<Response<Bytes>, E>>,
     E: std::fmt::Display + 'static,
+    ClassifierT: Classifier,
     OnResponseT: OnResponse,
-    OnFailureT: OnFailure,
+    OnFailureT: OnFailure<ClassifierT::FailureClass>,
 {
     type Output = Result<Response<Bytes>, E>;
 
@@ -38,19 +42,20 @@ where
         let _guard = this.span.enter();
         let result = futures::ready!(this.inner.poll(cx));
         let latency = this.start.elapsed();
+        let classifier = this.classifier.take().unwrap();
+        let on_response = this.on_response.take().unwrap();
+        let mut on_failure = this.on_failure.take().unwrap();
 
         match &result {
             Ok(response) => {
-                this.on_response
-                    .take()
-                    .unwrap()
-                    .on_response(response, latency, this.span);
+                on_response.on_response(response, latency, this.span);
+                if let Err(failure_class) = classifier.classify_response(response) {
+                    on_failure.on_failure(failure_class, latency, this.span);
+                }
             }
             Err(err) => {
-                this.on_failure
-                    .take()
-                    .unwrap()
-                    .on_failure(err, latency, this.span);
+                let failure_class = classifier.classify_error(err);
+                on_failure.on_failure(failure_class, latency, this.span);
             }
         }
 

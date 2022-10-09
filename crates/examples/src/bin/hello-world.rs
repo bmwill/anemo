@@ -2,6 +2,7 @@ use anemo::types::PeerEvent;
 use anemo::{rpc::Status, Network, Request, Response};
 use anemo_tower::trace::TraceLayer;
 use serde::{Deserialize, Serialize};
+use tower::Layer;
 use tracing::info;
 
 use greeter::greeter_client::GreeterClient;
@@ -49,13 +50,13 @@ async fn main() {
     let network_1 = Network::bind("localhost:0")
         .private_key(random_key())
         .server_name("test")
-        .start(GreeterServer::new(MyGreeter::default()))
+        .start(TraceLayer::new_for_server_errors().layer(GreeterServer::new(MyGreeter::default())))
         .unwrap();
 
     let network_2 = Network::bind("localhost:0")
         .private_key(random_key())
         .server_name("test")
-        .outbound_request_layer(TraceLayer::new())
+        .outbound_request_layer(TraceLayer::new_for_client_and_server_errors())
         .start(GreeterServer::new(MyGreeter::default()))
         .unwrap();
 

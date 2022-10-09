@@ -21,7 +21,7 @@
 //! tracing_subscriber::fmt::init();
 //!
 //! let mut service = ServiceBuilder::new()
-//!     .layer(TraceLayer::new())
+//!     .layer(TraceLayer::new_for_server_errors())
 //!     .service_fn(handle);
 //!
 //! let request = Request::new(Bytes::from("foo"));
@@ -70,7 +70,7 @@
 //! #
 //! let service = ServiceBuilder::new()
 //!     .layer(
-//!         TraceLayer::new()
+//!         TraceLayer::new_for_server_errors()
 //!             .make_span_with(
 //!                 DefaultMakeSpan::new().include_headers(true)
 //!             )
@@ -102,6 +102,7 @@
 //! use bytes::Bytes;
 //! use tower::ServiceBuilder;
 //! use anemo_tower::trace::TraceLayer;
+//! use anemo_tower::classify::StatusInRangeFailureClass;
 //! use std::time::Duration;
 //! use tracing::Span;
 //! # use tower::{ServiceExt, Service};
@@ -116,7 +117,7 @@
 //! #
 //! let service = ServiceBuilder::new()
 //!     .layer(
-//!         TraceLayer::new()
+//!         TraceLayer::new_for_server_errors()
 //!             .make_span_with(|request: &Request<Bytes>| {
 //!                 tracing::debug_span!("anemo-request")
 //!             })
@@ -126,7 +127,7 @@
 //!             .on_response(|response: &Response<Bytes>, latency: Duration, _span: &Span| {
 //!                 tracing::debug!("response generated in {:?}", latency)
 //!             })
-//!             .on_failure(|error: &dyn std::fmt::Display, latency: Duration, _span: &Span| {
+//!             .on_failure(|class: StatusInRangeFailureClass, latency: Duration, _span: &Span| {
 //!                 tracing::debug!("something went wrong")
 //!             })
 //!     )
@@ -148,6 +149,7 @@
 //! ```rust
 //! use tower::ServiceBuilder;
 //! use anemo_tower::trace::TraceLayer;
+//! use anemo_tower::classify::StatusInRangeFailureClass;
 //! use std::time::Duration;
 //! use tracing::Span;
 //! # use tower::{ServiceExt, Service};
@@ -165,10 +167,10 @@
 //! let service = ServiceBuilder::new()
 //!     .layer(
 //!         // This configuration will only emit events on failures
-//!         TraceLayer::new()
+//!         TraceLayer::new_for_server_errors()
 //!             .on_request(())
 //!             .on_response(())
-//!             .on_failure(|error: &dyn std::fmt::Display, latency: Duration, _span: &Span| {
+//!             .on_failure(|class: StatusInRangeFailureClass, latency: Duration, _span: &Span| {
 //!                 tracing::debug!("something went wrong")
 //!             })
 //!     )
@@ -197,11 +199,10 @@
 //! future completes with `Ok(response)` regardless if the response is
 //! classified as a success or a failure.
 //!
-//TODO add classifier
-////! For example if you're using [`ServerErrorsAsFailures`] as your classifier
-////! and the inner service responds with `500 Internal Server Error` then the
-////! `on_response` callback is still called. `on_failure` would _also_ be called
-////! in this case since the response was classified as a failure.
+//! For example if you're using [`StatusInRangeAsFailures::new_for_server_errors`] as your
+//! classifier and the inner service responds with `500 Internal Server Error` then the
+//! `on_response` callback is still called. `on_failure` would _also_ be called in this case since
+//! the response was classified as a failure.
 //!
 //! ### `on_failure`
 //!
@@ -234,7 +235,7 @@
 //! #
 //! let service = ServiceBuilder::new()
 //!     .layer(
-//!         TraceLayer::new()
+//!         TraceLayer::new_for_server_errors()
 //!             .make_span_with(|request: &Request<Bytes>| {
 //!                 tracing::debug_span!(
 //!                     "anemo-request",
@@ -257,6 +258,7 @@
 //! [`Service`]: tower::Service
 //! [`Service::call`]: tower::Service::call
 //! [record]: https://docs.rs/tracing/latest/tracing/span/struct.Span.html#method.record
+//! [`StatusInRangeAsFailures::new_for_server_errors`]: crate::classify::StatusInRangeAsFailures::new_for_server_errors
 //! [`TraceLayer::make_span_with`]: crate::trace::TraceLayer::make_span_with
 //! [`Span`]: tracing::Span
 
@@ -286,6 +288,7 @@ const DEFAULT_ERROR_LEVEL: Level = Level::ERROR;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::classify::StatusInRangeFailureClass;
     use anemo::Request;
     use anemo::Response;
     use bytes::Bytes;
@@ -303,7 +306,7 @@ mod tests {
         static ON_RESPONSE_COUNT: Lazy<AtomicU32> = Lazy::new(|| AtomicU32::new(0));
         static ON_FAILURE: Lazy<AtomicU32> = Lazy::new(|| AtomicU32::new(0));
 
-        let trace_layer = TraceLayer::new()
+        let trace_layer = TraceLayer::new_for_server_errors()
             .make_span_with(|_req: &Request<Bytes>| {
                 tracing::info_span!("test-span", foo = tracing::field::Empty)
             })
@@ -315,7 +318,7 @@ mod tests {
                 ON_RESPONSE_COUNT.fetch_add(1, Ordering::SeqCst);
             })
             .on_failure(
-                |_error: &dyn std::fmt::Display, _latency: Duration, _span: &Span| {
+                |_class: StatusInRangeFailureClass, _latency: Duration, _span: &Span| {
                     ON_FAILURE.fetch_add(1, Ordering::SeqCst);
                 },
             );
@@ -331,7 +334,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(1, ON_REQUEST_COUNT.load(Ordering::SeqCst), "request");
-        assert_eq!(1, ON_RESPONSE_COUNT.load(Ordering::SeqCst), "request");
+        assert_eq!(1, ON_RESPONSE_COUNT.load(Ordering::SeqCst), "response");
         assert_eq!(0, ON_FAILURE.load(Ordering::SeqCst), "failure");
     }
 

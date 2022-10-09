@@ -9,7 +9,7 @@ use tracing::{Level, Span};
 /// `on_failure` callback is called.
 ///
 /// [`Trace`]: super::Trace
-pub trait OnFailure {
+pub trait OnFailure<FailureClass> {
     /// Do the thing.
     ///
     /// `latency` is the duration since the request was received.
@@ -21,20 +21,20 @@ pub trait OnFailure {
     /// [`Span`]: https://docs.rs/tracing/latest/tracing/span/index.html
     /// [record]: https://docs.rs/tracing/latest/tracing/span/struct.Span.html#method.record
     /// [`TraceLayer::make_span_with`]: crate::trace::TraceLayer::make_span_with
-    fn on_failure(&mut self, error: &dyn std::fmt::Display, latency: Duration, span: &Span);
+    fn on_failure(&mut self, failure_classification: FailureClass, latency: Duration, span: &Span);
 }
 
-impl OnFailure for () {
+impl<FailureClass> OnFailure<FailureClass> for () {
     #[inline]
-    fn on_failure(&mut self, _: &dyn std::fmt::Display, _: Duration, _: &Span) {}
+    fn on_failure(&mut self, _: FailureClass, _: Duration, _: &Span) {}
 }
 
-impl<F> OnFailure for F
+impl<F, FailureClass> OnFailure<FailureClass> for F
 where
-    F: FnMut(&dyn std::fmt::Display, Duration, &Span),
+    F: FnMut(FailureClass, Duration, &Span),
 {
-    fn on_failure(&mut self, error: &dyn std::fmt::Display, latency: Duration, span: &Span) {
-        self(error, latency, span)
+    fn on_failure(&mut self, failure_classification: FailureClass, latency: Duration, span: &Span) {
+        self(failure_classification, latency, span)
     }
 }
 
@@ -81,15 +81,18 @@ impl DefaultOnFailure {
     }
 }
 
-impl OnFailure for DefaultOnFailure {
-    fn on_failure(&mut self, error: &dyn std::fmt::Display, latency: Duration, _: &Span) {
+impl<FailureClass> OnFailure<FailureClass> for DefaultOnFailure
+where
+    FailureClass: std::fmt::Display,
+{
+    fn on_failure(&mut self, failure_classification: FailureClass, latency: Duration, _: &Span) {
         // This macro is needed, unfortunately, because `tracing::event!` requires the level
         // argument to be static. Meaning we can't just pass `self.level`.
         macro_rules! log_response {
             ($level:expr) => {
                 tracing::event!(
                     $level,
-                    error = tracing::field::display(error),
+                    error = tracing::field::display(failure_classification),
                     latency = %self.latency_unit.display(latency),
                     "response failed",
                 )
