@@ -4,7 +4,7 @@ use crate::{
         response::{IntoResponse, StatusCode},
         HeaderMap,
     },
-    Response,
+    PeerId, Response,
 };
 
 pub mod codec;
@@ -14,6 +14,7 @@ pub struct Status {
     status: StatusCode,
     headers: HeaderMap,
     message: Option<String>,
+    peer_id: Option<PeerId>,
 
     /// Optional underlying error.
     source: Option<BoxError>,
@@ -25,6 +26,7 @@ impl Status {
         Self {
             status,
             message: None,
+            peer_id: None,
             headers: HeaderMap::default(),
             source: None,
         }
@@ -49,6 +51,31 @@ impl Status {
         status.message = Some(format!("unknown error: {error}"));
         status.source = Some(error);
         status
+    }
+
+    pub fn status(&self) -> StatusCode {
+        self.status
+    }
+
+    pub fn peer_id(&self) -> Option<&PeerId> {
+        self.peer_id.as_ref()
+    }
+
+    fn from_response<T>(response: Response<T>) -> Self {
+        let peer_id = response.peer_id().copied();
+        let (parts, _body) = response.into_parts();
+
+        let message = parts
+            .headers
+            .get(crate::types::header::STATUS_MESSAGE)
+            .cloned();
+        Self {
+            status: parts.status,
+            message,
+            peer_id,
+            headers: parts.headers,
+            source: None,
+        }
     }
 }
 
@@ -151,7 +178,7 @@ pub mod client {
             let status_code = response.status();
 
             if !status_code.is_success() {
-                return Err(Status::new(status_code));
+                return Err(Status::from_response(response));
             }
 
             let response = {
