@@ -104,12 +104,12 @@ impl<S, T> AddExtension<S, T> {
     }
 
     /// Gets a reference to the underlying service.
-    pub fn get_ref(&self) -> &S {
+    pub fn inner_ref(&self) -> &S {
         &self.inner
     }
 
     /// Gets a mutable reference to the underlying service.
-    pub fn get_mut(&mut self) -> &mut S {
+    pub fn inner_mut(&mut self) -> &mut S {
         &mut self.inner
     }
 

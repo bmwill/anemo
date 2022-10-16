@@ -87,6 +87,21 @@ pub mod client {
             Self { inner }
         }
 
+        /// Gets a reference to the underlying service.
+        pub fn inner(&self) -> &T {
+            &self.inner
+        }
+
+        /// Gets a mutable reference to the underlying service.
+        pub fn inner_mut(&mut self) -> &mut T {
+            &mut self.inner
+        }
+
+        /// Consumes `self`, returning the underlying service.
+        pub fn into_inner(self) -> T {
+            self.inner
+        }
+
         pub async fn ready(&mut self) -> Result<(), T::Error>
         where
             T: Service<Request<Bytes>>,

@@ -42,6 +42,21 @@ pub fn generate(service: &Service) -> TokenStream {
                     Self { inner }
                 }
 
+                /// Gets a reference to the underlying service.
+                pub fn inner(&self) -> &T {
+                    self.inner.inner()
+                }
+
+                /// Gets a mutable reference to the underlying service.
+                pub fn inner_mut(&mut self) -> &mut T {
+                    self.inner.inner_mut()
+                }
+
+                /// Consumes `self`, returning the underlying service.
+                pub fn into_inner(self) -> T {
+                    self.inner.into_inner()
+                }
+
                 #methods
             }
         }

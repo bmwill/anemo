@@ -66,12 +66,12 @@ impl<S, Classifier, MakeSpan, OnRequest, OnResponse, OnFailure>
     Trace<S, Classifier, MakeSpan, OnRequest, OnResponse, OnFailure>
 {
     /// Gets a reference to the underlying service.
-    pub fn get_ref(&self) -> &S {
+    pub fn inner(&self) -> &S {
         &self.inner
     }
 
     /// Gets a mutable reference to the underlying service.
-    pub fn get_mut(&mut self) -> &mut S {
+    pub fn inner_mut(&mut self) -> &mut S {
         &mut self.inner
     }
 
