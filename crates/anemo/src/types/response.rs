@@ -174,6 +174,11 @@ impl<T> Response<T> {
         &mut self.head.headers
     }
 
+    pub fn with_header<K: Into<String>, V: Into<String>>(mut self, key: K, value: V) -> Self {
+        self.headers_mut().insert(key.into(), value.into());
+        self
+    }
+
     pub fn extensions(&self) -> &Extensions {
         &self.head.extensions
     }
