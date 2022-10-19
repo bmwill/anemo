@@ -1,3 +1,4 @@
+pub mod auth;
 pub mod callback;
 pub mod classify;
 pub mod trace;
