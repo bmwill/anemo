@@ -187,6 +187,11 @@ impl<T> Response<T> {
         &mut self.head.extensions
     }
 
+    pub fn with_extension<E: Send + Sync + 'static>(mut self, extension: E) -> Self {
+        self.extensions_mut().insert(extension);
+        self
+    }
+
     // Returns the PeerId of the peer who created this Response
     pub fn peer_id(&self) -> Option<&PeerId> {
         self.extensions().get::<PeerId>()
