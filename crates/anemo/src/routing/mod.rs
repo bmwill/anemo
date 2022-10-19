@@ -1,6 +1,6 @@
 use crate::{Request, Response};
 use bytes::Bytes;
-use std::{collections::HashMap, convert::Infallible};
+use std::{collections::HashMap, convert::Infallible, fmt, sync::Arc};
 use tower::{
     util::{BoxCloneService, Oneshot},
     Service,
@@ -31,7 +31,7 @@ impl RouteId {
 #[derive(Clone)]
 pub struct Router {
     routes: HashMap<RouteId, Route>,
-    inner: matchit::Router<RouteId>,
+    matcher: RouteMatcher,
     fallback: Route,
 }
 
@@ -40,7 +40,7 @@ impl Router {
     pub fn new() -> Self {
         Self {
             routes: Default::default(),
-            inner: Default::default(),
+            matcher: Default::default(),
             fallback: Route::new(not_found::NotFound),
         }
     }
@@ -65,9 +65,10 @@ impl Router {
 
         let id = RouteId::next();
 
-        let service = Route::new(service);
+        let service =
+            try_downcast::<Route, _>(service).unwrap_or_else(|service| Route::new(service));
 
-        if let Err(err) = self.inner.insert(path, id) {
+        if let Err(err) = self.matcher.insert(path, id) {
             panic!("Invalid route: {}", err);
         }
 
@@ -87,6 +88,35 @@ impl Router {
     {
         let path = format!("/{}/*rest", S::SERVICE_NAME);
         self.route(&path, service)
+    }
+
+    /// Merge two routers into one.
+    ///
+    /// This is useful for breaking apps into smaller pieces and combining them
+    /// into one.
+    pub fn merge<R>(mut self, other: R) -> Self
+    where
+        R: Into<Router>,
+    {
+        let Router {
+            routes,
+            matcher,
+            fallback,
+        } = other.into();
+
+        for (id, route) in routes {
+            let path = matcher
+                .route_id_to_path
+                .get(&id)
+                .expect("no path for route id. This is a bug in anemo. Please file an issue");
+            self = self.route(path, route);
+        }
+
+        // TODO if we support custom fallback functions in the future we need to make sure to check
+        // that we dont try to merge two routers that both have custom fallbacks
+        let _fallback = fallback;
+
+        self
     }
 }
 
@@ -110,7 +140,7 @@ impl Service<Request<Bytes>> for Router {
 
         let path = req.route();
 
-        match self.inner.at(path) {
+        match self.matcher.at(path) {
             Ok(match_) => {
                 let route = self
                     .routes
@@ -122,6 +152,60 @@ impl Service<Request<Bytes>> for Router {
             | Err(MatchError::ExtraTrailingSlash)
             | Err(MatchError::NotFound) => self.fallback.oneshot_inner(req),
         }
+    }
+}
+
+/// Wrapper around `matchit::Router` that supports merging two `Router`s.
+#[derive(Clone, Default)]
+struct RouteMatcher {
+    inner: matchit::Router<RouteId>,
+    route_id_to_path: HashMap<RouteId, Arc<str>>,
+    path_to_route_id: HashMap<Arc<str>, RouteId>,
+}
+
+impl RouteMatcher {
+    fn insert(
+        &mut self,
+        path: impl Into<String>,
+        val: RouteId,
+    ) -> Result<(), matchit::InsertError> {
+        let path = path.into();
+
+        self.inner.insert(&path, val)?;
+
+        let shared_path: Arc<str> = path.into();
+        self.route_id_to_path.insert(val, shared_path.clone());
+        self.path_to_route_id.insert(shared_path, val);
+
+        Ok(())
+    }
+
+    fn at<'n, 'p>(
+        &'n self,
+        path: &'p str,
+    ) -> Result<matchit::Match<'n, 'p, &'n RouteId>, matchit::MatchError> {
+        self.inner.at(path)
+    }
+}
+
+impl fmt::Debug for RouteMatcher {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RouteMatcher")
+            .field("paths", &self.route_id_to_path)
+            .finish()
+    }
+}
+
+pub(crate) fn try_downcast<T, K>(k: K) -> Result<T, K>
+where
+    T: 'static,
+    K: Send + 'static,
+{
+    let mut k = Some(k);
+    if let Some(k) = <dyn std::any::Any>::downcast_mut::<Option<T>>(&mut k) {
+        Ok(k.take().unwrap())
+    } else {
+        Err(k.unwrap())
     }
 }
 
@@ -241,5 +325,55 @@ mod test {
         };
 
         tower::service_fn(handle).boxed_clone()
+    }
+
+    #[tokio::test]
+    async fn merge_router() {
+        let hello_world = tower::service_fn(|_request| async {
+            Ok(Response::new(Bytes::from_static(b"hello world!")))
+        });
+
+        let hello_world_router = Router::new().route("/hello-world", hello_world);
+        let echo_router = Router::new().route("/echo", echo_service());
+        let router = Router::new().merge(hello_world_router).merge(echo_router);
+
+        // Echo
+        let msg = b"echo this text";
+        let request = Request::new(Bytes::from_static(msg)).with_route("/echo");
+        let response = router.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::Success);
+        assert_eq!(response.body(), msg.as_ref());
+
+        // Hello World
+        let request = Request::new(Bytes::new()).with_route("/hello-world");
+        let response = router.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::Success);
+        assert_eq!(response.body(), "hello world!");
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Invalid route: insertion failed due to conflict with previously registered route"
+    )]
+    fn merge_router_with_conflicting_routes() {
+        let echo_router_1 = Router::new().route("/echo", echo_service());
+        let echo_router_2 = Router::new().route("/echo", echo_service());
+        Router::new().merge(echo_router_1).merge(echo_router_2);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Invalid route: insertion failed due to conflict with previously registered route"
+    )]
+    fn add_two_conflicting_routes() {
+        Router::new()
+            .route("/echo", echo_service())
+            .route("/echo", echo_service());
+    }
+
+    #[test]
+    fn test_try_downcast() {
+        assert_eq!(super::try_downcast::<i32, _>(5_u32), Err(5_u32));
+        assert_eq!(super::try_downcast::<i32, _>(5_i32), Ok(5_i32));
     }
 }

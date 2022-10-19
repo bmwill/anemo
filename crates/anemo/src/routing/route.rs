@@ -1,6 +1,6 @@
 use crate::{Request, Response};
 use bytes::Bytes;
-use std::convert::Infallible;
+use std::{convert::Infallible, fmt};
 use tower::{
     util::{BoxCloneService, Oneshot},
     Service, ServiceExt,
@@ -26,5 +26,31 @@ impl Route {
         req: Request<Bytes>,
     ) -> Oneshot<BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>, Request<Bytes>> {
         self.0.clone().oneshot(req)
+    }
+}
+
+impl fmt::Debug for Route {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Route").finish()
+    }
+}
+
+impl Service<Request<Bytes>> for Route {
+    type Response = Response<Bytes>;
+    type Error = Infallible;
+    type Future =
+        Oneshot<BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>, Request<Bytes>>;
+
+    #[inline]
+    fn poll_ready(
+        &mut self,
+        _cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
+        std::task::Poll::Ready(Ok(()))
+    }
+
+    #[inline]
+    fn call(&mut self, req: Request<Bytes>) -> Self::Future {
+        self.oneshot_inner(req)
     }
 }
