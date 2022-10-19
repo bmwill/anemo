@@ -118,6 +118,38 @@ impl Router {
 
         self
     }
+
+    /// Apply a [`tower::Layer`] to the router that will only run if the request matches
+    /// a route.
+    pub fn route_layer<L>(self, layer: L) -> Self
+    where
+        L: tower::Layer<Route>,
+        L::Service: Service<Request<Bytes>, Response = Response<Bytes>, Error = Infallible>
+            + Clone
+            + Send
+            + 'static,
+        <L::Service as Service<Request<Bytes>>>::Future: Send + 'static,
+    {
+        let Router {
+            routes,
+            matcher,
+            fallback,
+        } = self;
+
+        let routes = routes
+            .into_iter()
+            .map(|(id, route)| {
+                let route = Route::new(layer.layer(route));
+                (id, route)
+            })
+            .collect();
+
+        Router {
+            routes,
+            matcher,
+            fallback,
+        }
+    }
 }
 
 impl Service<Request<Bytes>> for Router {
@@ -375,5 +407,54 @@ mod test {
     fn test_try_downcast() {
         assert_eq!(super::try_downcast::<i32, _>(5_u32), Err(5_u32));
         assert_eq!(super::try_downcast::<i32, _>(5_i32), Ok(5_i32));
+    }
+
+    #[tokio::test]
+    async fn middleware_applies_to_routes_above() {
+        let pending =
+            tower::service_fn(|_request| async { std::future::pending::<Result<_, _>>().await });
+        let ready = tower::service_fn(|_request| async {
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            Ok(Response::new(Bytes::from_static(b"ready!")))
+        });
+        let router = Router::new()
+            .route("/one", pending)
+            .route_layer(crate::middleware::timeout::inbound::TimeoutLayer::new(
+                Some(std::time::Duration::new(0, 0)),
+            ))
+            .route("/two", ready);
+
+        let request = Request::new(Bytes::new()).with_route("/one");
+        let response = router.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::RequestTimeout);
+
+        let request = Request::new(Bytes::new()).with_route("/two");
+        let response = router.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::Success);
+    }
+
+    #[tokio::test]
+    async fn middleware_applies_to_routes_after_merge() {
+        let pending =
+            tower::service_fn(|_request| async { std::future::pending::<Result<_, _>>().await });
+        let ready = tower::service_fn(|_request| async {
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            Ok(Response::new(Bytes::from_static(b"ready!")))
+        });
+        let pending = Router::new().route("/one", pending).route_layer(
+            crate::middleware::timeout::inbound::TimeoutLayer::new(Some(std::time::Duration::new(
+                0, 0,
+            ))),
+        );
+        let ready = Router::new().route("/two", ready);
+        let router = Router::new().merge(pending).merge(ready);
+
+        let request = Request::new(Bytes::new()).with_route("/one");
+        let response = router.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::RequestTimeout);
+
+        let request = Request::new(Bytes::new()).with_route("/two");
+        let response = router.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::Success);
     }
 }

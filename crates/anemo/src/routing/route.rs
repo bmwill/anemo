@@ -6,8 +6,12 @@ use tower::{
     Service, ServiceExt,
 };
 
+/// How routes are stored inside a [`Router`](super::Router).
+///
+/// You normally shouldn't need to care about this type. It's used in
+/// [`Router::route_layer`](super::Router::route_layer).
 #[derive(Clone)]
-pub(super) struct Route(BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>);
+pub struct Route(BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>);
 
 impl Route {
     pub(super) fn new<T>(svc: T) -> Self
