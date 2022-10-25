@@ -56,6 +56,14 @@ pub fn generate(service: &Service) -> TokenStream {
                         inner,
                     }
                 }
+
+                pub fn inner(&self) -> &T {
+                    &self.inner
+                }
+
+                pub fn into_inner(self) -> Arc<T> {
+                    self.inner
+                }
             }
 
             impl<T> anemo::codegen::Service<anemo::Request<Bytes>> for #server_service<T>
