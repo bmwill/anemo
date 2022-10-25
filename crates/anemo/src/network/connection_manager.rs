@@ -461,7 +461,6 @@ impl ActivePeersInner {
         }
     }
 
-    #[allow(unused)]
     fn subscribe(
         &self,
     ) -> (
