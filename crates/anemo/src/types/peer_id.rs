@@ -1,7 +1,9 @@
+use serde::{Deserialize, Serialize};
+
 /// Length of a PeerId, based on the length of an ed25519 public key
 const PEER_ID_LENGTH: usize = 32;
 
-#[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct PeerId(pub [u8; PEER_ID_LENGTH]);
 
 impl PeerId {
