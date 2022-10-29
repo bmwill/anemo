@@ -53,7 +53,7 @@ pub trait Decoder {
 
 mod json {
     use super::{Codec, Decoder, Encoder};
-    use bytes::{Buf, BufMut};
+    use bytes::BufMut;
     use std::marker::PhantomData;
 
     #[derive(Debug)]
@@ -80,7 +80,7 @@ mod json {
         type Error = serde_json::Error;
 
         fn decode(&mut self, buf: bytes::Bytes) -> Result<Self::Item, Self::Error> {
-            serde_json::from_reader(buf.reader())
+            serde_json::from_slice(&buf)
         }
     }
 
@@ -118,7 +118,7 @@ mod json {
 
 mod bincode {
     use super::{Codec, Decoder, Encoder};
-    use bytes::{Buf, BufMut};
+    use bytes::BufMut;
     use std::marker::PhantomData;
 
     #[derive(Debug)]
@@ -145,7 +145,7 @@ mod bincode {
         type Error = bincode::Error;
 
         fn decode(&mut self, buf: bytes::Bytes) -> Result<Self::Item, Self::Error> {
-            bincode::deserialize_from(buf.reader())
+            bincode::deserialize(&buf)
         }
     }
 
