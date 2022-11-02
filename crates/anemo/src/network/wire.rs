@@ -9,7 +9,7 @@ use crate::{
     Config, Request, Response, Result,
 };
 use anyhow::{anyhow, bail};
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut};
 use futures::{SinkExt, StreamExt};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
@@ -110,7 +110,7 @@ pub(crate) async fn read_request<T: AsyncRead + Unpin>(
         .next()
         .await
         .ok_or_else(|| anyhow!("unexpected EOF"))??;
-    let raw_header: RawRequestHeader = bincode::deserialize_from(header_buf.reader())?;
+    let raw_header: RawRequestHeader = bincode::deserialize(&header_buf)?;
     let request_header = RequestHeader::from_raw(raw_header, version);
 
     // Read Body
@@ -135,7 +135,7 @@ pub(crate) async fn read_response<T: AsyncRead + Unpin>(
         .next()
         .await
         .ok_or_else(|| anyhow!("unexpected EOF"))??;
-    let raw_header: RawResponseHeader = bincode::deserialize_from(header_buf.reader())?;
+    let raw_header: RawResponseHeader = bincode::deserialize(&header_buf)?;
     let response_header = ResponseHeader::from_raw(raw_header, version)?;
 
     // Read Body
