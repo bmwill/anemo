@@ -1,10 +1,8 @@
-use super::super::LatencyUnit;
-use super::DEFAULT_MESSAGE_LEVEL;
+use super::{super::LatencyUnit, DEFAULT_MESSAGE_LEVEL};
 use anemo::Response;
 use bytes::Bytes;
 use std::time::Duration;
-use tracing::Level;
-use tracing::Span;
+use tracing::{Level, Span};
 
 /// Trait used to tell [`Trace`] what to do when a response has been produced.
 ///

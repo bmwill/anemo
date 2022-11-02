@@ -2,8 +2,6 @@ use crate::{
     config::EndpointConfig, connection::Connection, types::Address, ConnectionOrigin, PeerId,
     Result,
 };
-use futures::StreamExt;
-use quinn::{Datagrams, IncomingBiStreams, IncomingUniStreams};
 use std::{
     future::Future,
     net::SocketAddr,
@@ -20,26 +18,27 @@ pub(crate) struct Endpoint {
 }
 
 impl Endpoint {
-    pub fn new(config: EndpointConfig, socket: std::net::UdpSocket) -> Result<(Self, Incoming)> {
+    pub fn new(config: EndpointConfig, socket: std::net::UdpSocket) -> Result<Self> {
         let local_addr = socket.local_addr()?;
         let server_config = config.server_config().clone();
-        let (endpoint, incoming) =
-            quinn::Endpoint::new(Default::default(), Some(server_config), socket)?;
+        let endpoint = quinn::Endpoint::new(
+            Default::default(),
+            Some(server_config),
+            socket,
+            quinn::TokioRuntime,
+        )?;
 
         let endpoint = Self {
             inner: endpoint,
             local_addr,
             config,
         };
-        let incoming = Incoming::new(incoming);
-        Ok((endpoint, incoming))
+
+        Ok(endpoint)
     }
 
     #[cfg(test)]
-    fn new_with_address<A: Into<Address>>(
-        config: EndpointConfig,
-        addr: A,
-    ) -> Result<(Self, Incoming)> {
+    fn new_with_address<A: Into<Address>>(config: EndpointConfig, addr: A) -> Result<Self> {
         let socket = std::net::UdpSocket::bind(addr.into())?;
         Self::new(config, socket)
     }
@@ -91,26 +90,35 @@ impl Endpoint {
         // let _ = self.termination_tx.send(());
         self.inner.close(0_u32.into(), b"endpoint closed")
     }
-}
 
-/// Stream of incoming connections.
-#[derive(Debug)]
-#[must_use = "futures/streams/sinks do nothing unless you `.await` or poll them"]
-pub(crate) struct Incoming(quinn::Incoming);
-
-impl Incoming {
-    pub(crate) fn new(inner: quinn::Incoming) -> Self {
-        Self(inner)
+    /// Get the next incoming connection attempt from a client
+    ///
+    /// Yields [`Connecting`] futures that must be `await`ed to obtain the final `Connection`, or
+    /// `None` if the endpoint is [`close`](Self::close)d.
+    pub(crate) fn accept(&self) -> Accept<'_> {
+        Accept {
+            inner: self.inner.accept(),
+        }
     }
 }
 
-impl futures::stream::Stream for Incoming {
-    type Item = Connecting;
+pin_project_lite::pin_project! {
+    /// Future produced by [`Endpoint::accept`]
+    #[must_use = "futures/streams/sinks do nothing unless you `.await` or poll them"]
+    pub(crate) struct Accept<'a> {
+        #[pin]
+        inner: quinn::Accept<'a>,
+    }
+}
 
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        self.0
-            .poll_next_unpin(cx)
-            .map(|maybe_next| maybe_next.map(Connecting::new_inbound))
+impl<'a> Future for Accept<'a> {
+    type Output = Option<Connecting>;
+
+    fn poll(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.project()
+            .inner
+            .poll(ctx)
+            .map(|maybe_connecting| maybe_connecting.map(Connecting::new_inbound))
     }
 }
 
@@ -136,44 +144,22 @@ impl Connecting {
 }
 
 impl Future for Connecting {
-    type Output = Result<NewConnection>;
+    type Output = Result<Connection>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         Pin::new(&mut self.inner).poll(cx).map(|result| {
             result
                 .map_err(anyhow::Error::from)
-                .and_then(
-                    |quinn::NewConnection {
-                         connection,
-                         uni_streams,
-                         bi_streams,
-                         datagrams,
-                         ..
-                     }| {
-                        Ok(NewConnection {
-                            connection: Connection::new(connection, self.origin)?,
-                            uni_streams,
-                            bi_streams,
-                            datagrams,
-                        })
-                    },
-                )
+                .and_then(|connection| Connection::new(connection, self.origin))
                 .map_err(|e| anyhow::anyhow!("failed establishing {} connection: {e}", self.origin))
         })
     }
 }
 
-pub(crate) struct NewConnection {
-    pub connection: Connection,
-    pub uni_streams: IncomingUniStreams,
-    pub bi_streams: IncomingBiStreams,
-    pub datagrams: Datagrams,
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
-    use futures::{future::join, io::AsyncReadExt, stream::StreamExt};
+    use futures::{future::join, io::AsyncReadExt};
     use std::time::Duration;
 
     #[tokio::test]
@@ -182,20 +168,19 @@ mod test {
 
         let msg = b"hello";
         let config_1 = EndpointConfig::random("test");
-        let (endpoint_1, _incoming_1) = Endpoint::new_with_address(config_1, "localhost:0")?;
+        let endpoint_1 = Endpoint::new_with_address(config_1, "localhost:0")?;
         let peer_id_1 = endpoint_1.config.peer_id();
 
         println!("1: {}", endpoint_1.local_addr());
 
         let config_2 = EndpointConfig::random("test");
-        let (endpoint_2, mut incoming_2) = Endpoint::new_with_address(config_2, "localhost:0")?;
+        let endpoint_2 = Endpoint::new_with_address(config_2, "localhost:0")?;
         let peer_id_2 = endpoint_2.config.peer_id();
         let addr_2 = endpoint_2.local_addr();
         println!("2: {}", endpoint_2.local_addr());
 
         let peer_1 = async move {
-            let NewConnection { connection, .. } =
-                endpoint_1.connect(addr_2.into()).unwrap().await.unwrap();
+            let connection = endpoint_1.connect(addr_2.into()).unwrap().await.unwrap();
             assert_eq!(connection.peer_id(), peer_id_2);
             {
                 let mut send_stream = connection.open_uni().await.unwrap();
@@ -208,14 +193,10 @@ mod test {
         };
 
         let peer_2 = async move {
-            let NewConnection {
-                connection,
-                mut uni_streams,
-                ..
-            } = incoming_2.next().await.unwrap().await.unwrap();
+            let connection = endpoint_2.accept().await.unwrap().await.unwrap();
             assert_eq!(connection.peer_id(), peer_id_1);
 
-            let mut recv = uni_streams.next().await.unwrap().unwrap();
+            let mut recv = connection.accept_uni().await.unwrap();
             let mut buf = Vec::new();
             AsyncReadExt::read_to_end(&mut recv, &mut buf)
                 .await
@@ -239,31 +220,21 @@ mod test {
 
         let msg = b"hello";
         let config_1 = EndpointConfig::random("test");
-        let (endpoint_1, _incoming_1) = Endpoint::new_with_address(config_1, "localhost:0")?;
+        let endpoint_1 = Endpoint::new_with_address(config_1, "localhost:0")?;
         let peer_id_1 = endpoint_1.config.peer_id();
 
         println!("1: {}", endpoint_1.local_addr());
 
         let config_2 = EndpointConfig::random("test");
-        let (endpoint_2, mut incoming_2) = Endpoint::new_with_address(config_2, "localhost:0")?;
+        let endpoint_2 = Endpoint::new_with_address(config_2, "localhost:0")?;
         let peer_id_2 = endpoint_2.config.peer_id();
         let addr_2 = endpoint_2.local_addr();
         println!("2: {}", endpoint_2.local_addr());
 
         let peer_1 = async move {
-            let connection_1 = endpoint_1
-                .connect(addr_2.into())
-                .unwrap()
-                .await
-                .unwrap()
-                .connection;
+            let connection_1 = endpoint_1.connect(addr_2.into()).unwrap().await.unwrap();
             assert_eq!(connection_1.peer_id(), peer_id_2);
-            let connection_2 = endpoint_1
-                .connect(addr_2.into())
-                .unwrap()
-                .await
-                .unwrap()
-                .connection;
+            let connection_2 = endpoint_1.connect(addr_2.into()).unwrap().await.unwrap();
             assert_eq!(connection_2.peer_id(), peer_id_2);
             let req_1 = async {
                 let mut send_stream = connection_2.open_uni().await.unwrap();
@@ -282,20 +253,10 @@ mod test {
         };
 
         let peer_2 = async move {
-            let NewConnection {
-                connection,
-                uni_streams,
-                ..
-            } = incoming_2.next().await.unwrap().await.unwrap();
-            let (connection_1, mut uni_streams_1) = (connection, uni_streams);
+            let connection_1 = endpoint_2.accept().await.unwrap().await.unwrap();
             assert_eq!(connection_1.peer_id(), peer_id_1);
 
-            let NewConnection {
-                connection,
-                uni_streams,
-                ..
-            } = incoming_2.next().await.unwrap().await.unwrap();
-            let (connection_2, mut uni_streams_2) = (connection, uni_streams);
+            let connection_2 = endpoint_2.accept().await.unwrap().await.unwrap();
             assert_eq!(connection_2.peer_id(), peer_id_1);
             assert_ne!(connection_1.stable_id(), connection_2.stable_id());
 
@@ -303,7 +264,7 @@ mod test {
             println!("connection_2: {:#?}", connection_2);
 
             let req_1 = async move {
-                let mut recv = uni_streams_1.next().await.unwrap().unwrap();
+                let mut recv = connection_1.accept_uni().await.unwrap();
                 let mut buf = Vec::new();
                 AsyncReadExt::read_to_end(&mut recv, &mut buf)
                     .await
@@ -312,7 +273,7 @@ mod test {
                 assert_eq!(buf, msg);
             };
             let req_2 = async move {
-                let mut recv = uni_streams_2.next().await.unwrap().unwrap();
+                let mut recv = connection_2.accept_uni().await.unwrap();
                 let mut buf = Vec::new();
                 AsyncReadExt::read_to_end(&mut recv, &mut buf)
                     .await

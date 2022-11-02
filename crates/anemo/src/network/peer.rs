@@ -1,5 +1,7 @@
-use super::wire::{network_message_frame_codec, read_response, write_request};
-use super::OutboundRequestLayer;
+use super::{
+    wire::{network_message_frame_codec, read_response, write_request},
+    OutboundRequestLayer,
+};
 use crate::{connection::Connection, PeerId, Request, Response, Result};
 use bytes::Bytes;
 use futures::future::BoxFuture;

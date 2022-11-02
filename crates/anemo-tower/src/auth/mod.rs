@@ -44,8 +44,7 @@ impl AllowedPeers {
 
 impl AuthorizeRequest for AllowedPeers {
     fn authorize(&self, request: &mut Request<Bytes>) -> Result<(), Response<Bytes>> {
-        use anemo::types::response::IntoResponse;
-        use anemo::types::response::StatusCode;
+        use anemo::types::response::{IntoResponse, StatusCode};
 
         let peer_id = request
             .peer_id()
@@ -62,11 +61,10 @@ impl AuthorizeRequest for AllowedPeers {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use anemo::types::response::IntoResponse;
-    use anemo::types::response::StatusCode;
-    use anemo::PeerId;
-    use anemo::Request;
-    use anemo::Response;
+    use anemo::{
+        types::response::{IntoResponse, StatusCode},
+        PeerId, Request, Response,
+    };
     use bytes::Bytes;
     use tower::{BoxError, Service, ServiceBuilder, ServiceExt};
 

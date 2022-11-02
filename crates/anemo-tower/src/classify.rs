@@ -1,4 +1,7 @@
-use anemo::{types::header, types::response::StatusCode, Response};
+use anemo::{
+    types::{header, response::StatusCode},
+    Response,
+};
 use std::{fmt, ops::RangeInclusive};
 
 /// Trait for classifying responses as either success or failure.

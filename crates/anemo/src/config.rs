@@ -349,7 +349,7 @@ impl EndpointConfigBuilder {
             .with_single_cert(vec![cert], pkcs8_der)?;
 
         let mut client = quinn::ClientConfig::new(Arc::new(client_crypto));
-        client.transport = transport_config;
+        client.transport_config(transport_config);
         Ok(client)
     }
 }
@@ -404,7 +404,7 @@ impl EndpointConfig {
             .unwrap();
 
         let mut client = quinn::ClientConfig::new(Arc::new(client_crypto));
-        client.transport = self.transport_config.clone();
+        client.transport_config(self.transport_config.clone());
         client
     }
 

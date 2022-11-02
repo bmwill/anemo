@@ -259,8 +259,7 @@ impl IntoResponse for () {
 mod test {
     #[test]
     fn all_status_code_variants_are_returned_from_new() {
-        use super::StatusCode;
-        use super::StatusCode::*;
+        use super::{StatusCode, StatusCode::*};
 
         macro_rules! ensure_mapping {
             ($($variant:path),+ $(,)?) => {

@@ -303,9 +303,10 @@ async fn drop_shutdown() -> Result<()> {
 #[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn early_termination_of_request_handlers() {
     use std::time::Duration;
-    use tokio::sync::mpsc;
-    use tokio::sync::oneshot;
-    use tokio::time::timeout;
+    use tokio::{
+        sync::{mpsc, oneshot},
+        time::timeout,
+    };
 
     const HANDLER_SLEEP: u64 = 100;
 
@@ -362,12 +363,17 @@ async fn early_termination_of_request_handlers() {
 
 #[tokio::test]
 async fn user_provided_client_service_layer() {
-    use std::sync::atomic::AtomicUsize;
-    use std::sync::atomic::Ordering;
-    use std::sync::Arc;
-    use std::task::{Context, Poll};
-    use tower::layer::{layer_fn, Layer};
-    use tower::Service;
+    use std::{
+        sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        },
+        task::{Context, Poll},
+    };
+    use tower::{
+        layer::{layer_fn, Layer},
+        Service,
+    };
 
     #[derive(Clone)]
     pub struct CounterService<S> {

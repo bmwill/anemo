@@ -21,11 +21,12 @@ pub trait ResponseHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use anemo::Request;
-    use anemo::Response;
+    use anemo::{Request, Response};
     use bytes::Bytes;
-    use std::sync::atomic::{AtomicU32, Ordering};
-    use std::sync::Arc;
+    use std::sync::{
+        atomic::{AtomicU32, Ordering},
+        Arc,
+    };
     use tower::{BoxError, Service, ServiceBuilder, ServiceExt};
 
     #[derive(Clone)]

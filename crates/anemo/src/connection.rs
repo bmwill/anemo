@@ -107,6 +107,21 @@ impl Connection {
         trace!("Closing Connection");
         self.inner.close(0_u32.into(), b"connection closed")
     }
+
+    /// Accept the next incoming uni-directional stream
+    pub async fn accept_uni(&self) -> Result<RecvStream, ConnectionError> {
+        self.inner.accept_uni().await
+    }
+
+    /// Accept the next incoming bidirectional stream
+    pub async fn accept_bi(&self) -> Result<(SendStream, RecvStream), ConnectionError> {
+        self.inner.accept_bi().await
+    }
+
+    /// Receive an application datagram
+    pub async fn read_datagram(&self) -> Result<bytes::Bytes, ConnectionError> {
+        self.inner.read_datagram().await
+    }
 }
 
 impl fmt::Debug for Connection {

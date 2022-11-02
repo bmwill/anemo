@@ -1,13 +1,13 @@
-use anemo::types::PeerEvent;
-use anemo::{rpc::Status, Network, Request, Response};
+use anemo::{rpc::Status, types::PeerEvent, Network, Request, Response};
 use anemo_tower::trace::TraceLayer;
 use serde::{Deserialize, Serialize};
 use tower::Layer;
 use tracing::info;
 
-use greeter::greeter_client::GreeterClient;
-use greeter::greeter_server::Greeter;
-use greeter::greeter_server::GreeterServer;
+use greeter::{
+    greeter_client::GreeterClient,
+    greeter_server::{Greeter, GreeterServer},
+};
 mod greeter {
     include!(concat!(env!("OUT_DIR"), "/example.helloworld.Greeter.rs"));
 }

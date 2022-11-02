@@ -289,8 +289,7 @@ const DEFAULT_ERROR_LEVEL: Level = Level::ERROR;
 mod tests {
     use super::*;
     use crate::classify::StatusInRangeFailureClass;
-    use anemo::Request;
-    use anemo::Response;
+    use anemo::{Request, Response};
     use bytes::Bytes;
     use once_cell::sync::Lazy;
     use std::{

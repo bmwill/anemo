@@ -1,6 +1,8 @@
-use crate::manual::Method;
-use crate::manual::Service;
-use crate::{generate_doc_comment, generate_doc_comments, naive_snake_case};
+use crate::{
+    generate_doc_comment, generate_doc_comments,
+    manual::{Method, Service},
+    naive_snake_case,
+};
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::{Ident, Lit, LitStr};

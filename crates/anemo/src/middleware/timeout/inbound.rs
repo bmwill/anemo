@@ -115,12 +115,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::Timeout;
-    use crate::types::response::StatusCode;
-    use crate::Request;
-    use crate::Response;
+    use crate::{types::response::StatusCode, Request, Response};
     use bytes::Bytes;
-    use std::convert::Infallible;
-    use std::time::Duration;
+    use std::{convert::Infallible, time::Duration};
     use tower::{service_fn, ServiceBuilder, ServiceExt};
 
     enum ExpectedResult {

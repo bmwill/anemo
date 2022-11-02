@@ -2,12 +2,13 @@ use crate::{
     config::EndpointConfig,
     endpoint::Endpoint,
     middleware::{add_extension::AddExtensionLayer, timeout},
-    types::Address,
+    types::{Address, DisconnectReason, PeerEvent},
     Config, PeerId, Request, Response, Result,
 };
 use anyhow::anyhow;
 use bytes::Bytes;
 use std::{convert::Infallible, net::SocketAddr, sync::Arc};
+use tokio::sync::{broadcast, mpsc, oneshot};
 use tower::{
     util::{BoxLayer, BoxService},
     Layer, Service, ServiceBuilder, ServiceExt,
@@ -121,7 +122,7 @@ impl Builder {
             .private_key(private_key)
             .build()?;
         let socket = std::net::UdpSocket::bind(self.bind_address)?;
-        let (endpoint, incoming) = Endpoint::new(endpoint_config, socket)?;
+        let endpoint = Endpoint::new(endpoint_config, socket)?;
 
         let config = Arc::new(config);
 
@@ -159,7 +160,6 @@ impl Builder {
                 endpoint.clone(),
                 active_peers.clone(),
                 known_peers.clone(),
-                incoming,
                 service,
             );
 
@@ -202,12 +202,7 @@ impl Network {
         self.0.peers()
     }
 
-    pub fn subscribe(
-        &self,
-    ) -> (
-        tokio::sync::broadcast::Receiver<crate::types::PeerEvent>,
-        Vec<PeerId>,
-    ) {
+    pub fn subscribe(&self) -> (broadcast::Receiver<PeerEvent>, Vec<PeerId>) {
         self.0.active_peers.subscribe()
     }
 
@@ -259,7 +254,7 @@ struct NetworkInner {
     endpoint: Arc<Endpoint>,
     active_peers: ActivePeers,
     known_peers: KnownPeers,
-    connection_manager_handle: tokio::sync::mpsc::Sender<ConnectionManagerRequest>,
+    connection_manager_handle: mpsc::Sender<ConnectionManagerRequest>,
 
     outbound_request_layer: OutboundRequestLayer,
 }
@@ -283,7 +278,7 @@ impl NetworkInner {
     }
 
     async fn connect(&self, addr: Address, peer_id: Option<PeerId>) -> Result<PeerId> {
-        let (sender, reciever) = tokio::sync::oneshot::channel();
+        let (sender, reciever) = oneshot::channel();
         self.connection_manager_handle
             .send(ConnectionManagerRequest::ConnectRequest(
                 addr, peer_id, sender,
@@ -295,7 +290,7 @@ impl NetworkInner {
 
     fn disconnect(&self, peer_id: PeerId) -> Result<()> {
         self.active_peers
-            .remove(&peer_id, crate::types::DisconnectReason::Requested);
+            .remove(&peer_id, DisconnectReason::Requested);
         Ok(())
     }
 

@@ -1,8 +1,7 @@
 use super::DEFAULT_MESSAGE_LEVEL;
 use anemo::Request;
 use bytes::Bytes;
-use tracing::Level;
-use tracing::Span;
+use tracing::{Level, Span};
 
 /// Trait used to tell [`Trace`] what to do when a request is received.
 ///

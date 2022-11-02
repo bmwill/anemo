@@ -1,7 +1,5 @@
-use crate::types::header;
-use crate::types::HeaderMap;
-use std::fmt;
-use std::time::Duration;
+use crate::types::{header, HeaderMap};
+use std::{fmt, time::Duration};
 
 pub(crate) mod inbound;
 pub(crate) mod outbound;

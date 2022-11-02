@@ -52,8 +52,7 @@
 
 use crate::{Request, Response};
 use std::task::{Context, Poll};
-use tower::layer::Layer;
-use tower::Service;
+use tower::{layer::Layer, Service};
 
 /// [`Layer`] for adding some shareable value to [request extensions].
 ///
@@ -149,8 +148,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::AddExtensionLayer;
-    use crate::Request;
-    use crate::Response;
+    use crate::{Request, Response};
     use bytes::Bytes;
     use std::{convert::Infallible, sync::Arc};
     use tower::{service_fn, ServiceBuilder, ServiceExt};

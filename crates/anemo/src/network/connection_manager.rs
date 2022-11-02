@@ -2,35 +2,32 @@ use super::request_handler::InboundRequestHandler;
 use crate::{
     config::Config,
     connection::Connection,
-    endpoint::{Connecting, Endpoint, Incoming, NewConnection},
-    types::{Address, PeerInfo},
+    endpoint::{Connecting, Endpoint},
+    types::{Address, DisconnectReason, PeerEvent, PeerInfo},
     ConnectionOrigin, PeerId, Request, Response, Result,
 };
 use bytes::Bytes;
-use futures::{
-    stream::{Fuse, FuturesUnordered},
-    FutureExt, StreamExt,
-};
+use futures::FutureExt;
 use std::{
     collections::{hash_map::Entry, HashMap, HashSet},
     convert::Infallible,
     sync::{Arc, RwLock},
+};
+use tokio::{
+    sync::{broadcast, mpsc, oneshot},
+    task::JoinSet,
 };
 use tower::util::BoxCloneService;
 use tracing::{debug, info, instrument, trace};
 
 #[derive(Debug)]
 pub enum ConnectionManagerRequest {
-    ConnectRequest(
-        Address,
-        Option<PeerId>,
-        tokio::sync::oneshot::Sender<Result<PeerId>>,
-    ),
+    ConnectRequest(Address, Option<PeerId>, oneshot::Sender<Result<PeerId>>),
 }
 
 struct ConnectingOutput {
-    connecting_result: Result<NewConnection>,
-    maybe_oneshot: Option<tokio::sync::oneshot::Sender<Result<PeerId>>>,
+    connecting_result: Result<Connection>,
+    maybe_oneshot: Option<oneshot::Sender<Result<PeerId>>>,
     target_address: Option<Address>,
     target_peer_id: Option<PeerId>,
 }
@@ -40,14 +37,13 @@ pub(crate) struct ConnectionManager {
 
     endpoint: Arc<Endpoint>,
 
-    mailbox: Fuse<tokio_stream::wrappers::ReceiverStream<ConnectionManagerRequest>>,
-    pending_connections: FuturesUnordered<JoinHandle<ConnectingOutput>>,
-    pending_dials: HashMap<PeerId, tokio::sync::oneshot::Receiver<Result<PeerId>>>,
+    mailbox: mpsc::Receiver<ConnectionManagerRequest>,
+    pending_connections: JoinSet<ConnectingOutput>,
+    pending_dials: HashMap<PeerId, oneshot::Receiver<Result<PeerId>>>,
     dial_backoff_states: HashMap<PeerId, DialBackoffState>,
 
     active_peers: ActivePeers,
     known_peers: KnownPeers,
-    incoming: Fuse<Incoming>,
 
     service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
 }
@@ -64,22 +60,19 @@ impl ConnectionManager {
         endpoint: Arc<Endpoint>,
         active_peers: ActivePeers,
         known_peers: KnownPeers,
-        incoming: Incoming,
         service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
-    ) -> (Self, tokio::sync::mpsc::Sender<ConnectionManagerRequest>) {
-        let (sender, reciever) =
-            tokio::sync::mpsc::channel(config.connection_manager_channel_capacity());
+    ) -> (Self, mpsc::Sender<ConnectionManagerRequest>) {
+        let (sender, reciever) = mpsc::channel(config.connection_manager_channel_capacity());
         (
             Self {
                 config,
                 endpoint,
-                mailbox: tokio_stream::wrappers::ReceiverStream::new(reciever).fuse(),
-                pending_connections: FuturesUnordered::new(),
+                mailbox: reciever,
+                pending_connections: JoinSet::new(),
                 pending_dials: HashMap::default(),
                 dial_backoff_states: HashMap::default(),
                 active_peers,
                 known_peers,
-                incoming: incoming.fuse(),
                 service,
             },
             sender,
@@ -110,11 +103,11 @@ impl ConnectionManager {
             tokio::time::interval(self.config.connectivity_check_interval() + jitter);
 
         loop {
-            futures::select! {
-                now = interval.tick().fuse() => {
+            tokio::select! {
+                now = interval.tick() => {
                     self.handle_connectivity_check(now.into_std());
                 }
-                maybe_request = self.mailbox.next() => {
+                maybe_request = self.mailbox.recv() => {
                     // Once all handles to the ConnectionManager's mailbox have been dropped this
                     // will yeild `None` and we can break out of the event loop and terminate the
                     // network
@@ -130,20 +123,21 @@ impl ConnectionManager {
                         }
                     }
                 }
-                connecting = self.incoming.select_next_some() => {
-                    self.handle_incoming(connecting);
+                connecting = self.endpoint.accept() => {
+                    if let Some(connecting) = connecting {
+                        self.handle_incoming(connecting);
+                    }
                 },
-                connecting_output = self.pending_connections.select_next_some() => {
-                    self.handle_connecting_result(connecting_output);
+                Some(connecting_output) = self.pending_connections.join_next() => {
+                    self.handle_connecting_result(connecting_output.unwrap());
                 },
-                complete => break,
             }
         }
 
         info!("ConnectionManager ended");
     }
 
-    fn add_peer(&mut self, new_connection: NewConnection) {
+    fn add_peer(&mut self, new_connection: Connection) {
         if let Some(new_connection) = self
             .active_peers
             .add(&self.endpoint.peer_id(), new_connection)
@@ -165,22 +159,20 @@ impl ConnectionManager {
         &mut self,
         address: Address,
         peer_id: Option<PeerId>,
-        oneshot: tokio::sync::oneshot::Sender<Result<PeerId>>,
+        oneshot: oneshot::Sender<Result<PeerId>>,
     ) {
         self.dial_peer(address, peer_id, oneshot);
     }
 
     fn handle_incoming(&mut self, connecting: Connecting) {
         trace!("recieved new incoming connection");
-        let join_handle = JoinHandle(tokio::spawn(connecting.map(|connecting_result| {
-            ConnectingOutput {
-                connecting_result,
-                maybe_oneshot: None,
-                target_address: None,
-                target_peer_id: None,
-            }
-        })));
-        self.pending_connections.push(join_handle);
+        let connecting = connecting.map(|connecting_result| ConnectingOutput {
+            connecting_result,
+            maybe_oneshot: None,
+            target_address: None,
+            target_peer_id: None,
+        });
+        self.pending_connections.spawn(connecting);
     }
 
     fn handle_connecting_result(
@@ -194,7 +186,7 @@ impl ConnectionManager {
     ) {
         match connecting_result {
             Ok(new_connection) => {
-                let peer_id = new_connection.connection.peer_id();
+                let peer_id = new_connection.peer_id();
                 debug!(peer_id =% peer_id, "new connection");
                 self.add_peer(new_connection);
                 if let Some(oneshot) = maybe_oneshot {
@@ -250,12 +242,12 @@ impl ConnectionManager {
                     false
                 }
 
-                Err(tokio::sync::oneshot::error::TryRecvError::Closed) => {
+                Err(oneshot::error::TryRecvError::Closed) => {
                     panic!("BUG: connection-manager never finished dialing a peer")
                 }
 
                 // Dialing is in progress
-                Err(tokio::sync::oneshot::error::TryRecvError::Empty) => true,
+                Err(oneshot::error::TryRecvError::Empty) => true,
             });
 
         let active_peers = self
@@ -287,7 +279,7 @@ impl ConnectionManager {
         );
 
         for mut peer in eligible.into_iter().take(number_to_dial) {
-            let (sender, reciever) = tokio::sync::oneshot::channel();
+            let (sender, reciever) = oneshot::channel();
 
             // Select the index of the address to dial by mapping the number of attempts we've made
             // so far into the Peer's known addresses
@@ -308,7 +300,7 @@ impl ConnectionManager {
         &mut self,
         address: Address,
         peer_id: Option<PeerId>,
-        oneshot: tokio::sync::oneshot::Sender<Result<PeerId>>,
+        oneshot: oneshot::Sender<Result<PeerId>>,
     ) {
         let target_address = Some(address.clone());
         let connecting = if let Some(peer_id) = peer_id {
@@ -317,7 +309,7 @@ impl ConnectionManager {
         } else {
             self.endpoint.connect(address)
         };
-        let join_handle = JoinHandle(tokio::spawn(async move {
+        let connecting = async move {
             let connecting_result = match connecting {
                 Ok(connecting) => connecting.await,
                 Err(e) => Err(e),
@@ -328,8 +320,8 @@ impl ConnectionManager {
                 target_address,
                 target_peer_id: peer_id,
             }
-        }));
-        self.pending_connections.push(join_handle);
+        };
+        self.pending_connections.spawn(connecting);
     }
 }
 
@@ -375,29 +367,6 @@ impl DialBackoffState {
     }
 }
 
-// JoinHandle that aborts on drop
-#[derive(Debug)]
-#[must_use]
-pub struct JoinHandle<T>(tokio::task::JoinHandle<T>);
-
-impl<T> Drop for JoinHandle<T> {
-    fn drop(&mut self) {
-        self.0.abort();
-    }
-}
-
-impl<T> std::future::Future for JoinHandle<T> {
-    type Output = T;
-
-    fn poll(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Self::Output> {
-        // If the task panics just propagate it up
-        std::pin::Pin::new(&mut self.0).poll(cx).map(Result::unwrap)
-    }
-}
-
 #[derive(Debug, Clone)]
 pub(crate) struct ActivePeers(Arc<RwLock<ActivePeersInner>>);
 
@@ -407,12 +376,7 @@ impl ActivePeers {
     }
 
     #[allow(unused)]
-    pub fn subscribe(
-        &self,
-    ) -> (
-        tokio::sync::broadcast::Receiver<crate::types::PeerEvent>,
-        Vec<PeerId>,
-    ) {
+    pub fn subscribe(&self) -> (broadcast::Receiver<PeerEvent>, Vec<PeerId>) {
         self.0.read().unwrap().subscribe()
     }
 
@@ -424,7 +388,7 @@ impl ActivePeers {
         self.0.read().unwrap().get(peer_id)
     }
 
-    pub fn remove(&self, peer_id: &PeerId, reason: crate::types::DisconnectReason) {
+    pub fn remove(&self, peer_id: &PeerId, reason: DisconnectReason) {
         self.0.write().unwrap().remove(peer_id, reason)
     }
 
@@ -432,7 +396,7 @@ impl ActivePeers {
         &self,
         peer_id: PeerId,
         stable_id: usize,
-        reason: crate::types::DisconnectReason,
+        reason: DisconnectReason,
     ) {
         self.0
             .write()
@@ -441,7 +405,7 @@ impl ActivePeers {
     }
 
     #[must_use]
-    fn add(&self, own_peer_id: &PeerId, new_connection: NewConnection) -> Option<NewConnection> {
+    fn add(&self, own_peer_id: &PeerId, new_connection: Connection) -> Option<Connection> {
         self.0.write().unwrap().add(own_peer_id, new_connection)
     }
 }
@@ -449,24 +413,19 @@ impl ActivePeers {
 #[derive(Debug)]
 struct ActivePeersInner {
     connections: HashMap<PeerId, Connection>,
-    peer_event_sender: tokio::sync::broadcast::Sender<crate::types::PeerEvent>,
+    peer_event_sender: broadcast::Sender<PeerEvent>,
 }
 
 impl ActivePeersInner {
     fn new(channel_size: usize) -> Self {
-        let (sender, _reciever) = tokio::sync::broadcast::channel(channel_size);
+        let (sender, _reciever) = broadcast::channel(channel_size);
         Self {
             connections: Default::default(),
             peer_event_sender: sender,
         }
     }
 
-    fn subscribe(
-        &self,
-    ) -> (
-        tokio::sync::broadcast::Receiver<crate::types::PeerEvent>,
-        Vec<PeerId>,
-    ) {
+    fn subscribe(&self) -> (broadcast::Receiver<PeerEvent>, Vec<PeerId>) {
         let peers = self.peers();
         let reciever = self.peer_event_sender.subscribe();
         (reciever, peers)
@@ -480,12 +439,12 @@ impl ActivePeersInner {
         self.connections.get(peer_id).cloned()
     }
 
-    fn remove(&mut self, peer_id: &PeerId, reason: crate::types::DisconnectReason) {
+    fn remove(&mut self, peer_id: &PeerId, reason: DisconnectReason) {
         if let Some(connection) = self.connections.remove(peer_id) {
             // maybe actually provide reason to other side?
             connection.close();
 
-            self.send_event(crate::types::PeerEvent::LostPeer(*peer_id, reason));
+            self.send_event(PeerEvent::LostPeer(*peer_id, reason));
         }
     }
 
@@ -493,7 +452,7 @@ impl ActivePeersInner {
         &mut self,
         peer_id: PeerId,
         stable_id: usize,
-        reason: crate::types::DisconnectReason,
+        reason: DisconnectReason,
     ) {
         match self.connections.entry(peer_id) {
             Entry::Occupied(entry) => {
@@ -503,55 +462,48 @@ impl ActivePeersInner {
                     // maybe actually provide reason to other side?
                     connection.close();
 
-                    self.send_event(crate::types::PeerEvent::LostPeer(peer_id, reason));
+                    self.send_event(PeerEvent::LostPeer(peer_id, reason));
                 }
             }
             Entry::Vacant(_) => {}
         }
     }
 
-    fn send_event(&self, event: crate::types::PeerEvent) {
+    fn send_event(&self, event: PeerEvent) {
         // We don't care if anyone is listening
         let _ = self.peer_event_sender.send(event);
     }
 
     #[must_use]
-    fn add(
-        &mut self,
-        own_peer_id: &PeerId,
-        new_connection: NewConnection,
-    ) -> Option<NewConnection> {
+    fn add(&mut self, own_peer_id: &PeerId, new_connection: Connection) -> Option<Connection> {
         // TODO drop Connection if you've somehow connected out ourself
 
-        let peer_id = new_connection.connection.peer_id();
+        let peer_id = new_connection.peer_id();
         match self.connections.entry(peer_id) {
             Entry::Occupied(mut entry) => {
                 if Self::simultaneous_dial_tie_breaking(
                     own_peer_id,
                     &peer_id,
                     entry.get().origin(),
-                    new_connection.connection.origin(),
+                    new_connection.origin(),
                 ) {
                     debug!("closing old connection with {peer_id:?} to mitigate simultaneous dial");
-                    let old_connection = entry.insert(new_connection.connection.clone());
+                    let old_connection = entry.insert(new_connection.clone());
                     old_connection.close();
-                    self.send_event(crate::types::PeerEvent::LostPeer(
-                        peer_id,
-                        crate::types::DisconnectReason::Requested,
-                    ));
+                    self.send_event(PeerEvent::LostPeer(peer_id, DisconnectReason::Requested));
                 } else {
                     debug!("closing new connection with {peer_id:?} to mitigate simultaneous dial");
-                    new_connection.connection.close();
+                    new_connection.close();
                     // Early return to avoid standing up Incoming Request handlers
                     return None;
                 }
             }
             Entry::Vacant(entry) => {
-                entry.insert(new_connection.connection.clone());
+                entry.insert(new_connection.clone());
             }
         }
 
-        self.send_event(crate::types::PeerEvent::NewPeer(peer_id));
+        self.send_event(PeerEvent::NewPeer(peer_id));
 
         Some(new_connection)
     }

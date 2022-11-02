@@ -1,5 +1,4 @@
-use super::super::LatencyUnit;
-use super::DEFAULT_ERROR_LEVEL;
+use super::{super::LatencyUnit, DEFAULT_ERROR_LEVEL};
 use std::time::Duration;
 use tracing::{Level, Span};
 
