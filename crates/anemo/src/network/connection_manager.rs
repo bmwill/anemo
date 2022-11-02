@@ -9,7 +9,7 @@ use crate::{
 use bytes::Bytes;
 use futures::FutureExt;
 use std::{
-    collections::{hash_map::Entry, HashMap, HashSet},
+    collections::{hash_map::Entry, HashMap},
     convert::Infallible,
     sync::{Arc, RwLock},
 };
@@ -250,25 +250,25 @@ impl ConnectionManager {
                 Err(oneshot::error::TryRecvError::Empty) => true,
             });
 
-        let active_peers = self
-            .active_peers
-            .peers()
-            .into_iter()
-            .collect::<HashSet<PeerId>>();
-        let known_peers = self.known_peers.get_all();
+        let eligible: Vec<_> = {
+            let active_peers = self.active_peers.inner();
+            let known_peers = self.known_peers.inner();
 
-        let eligible = known_peers
-            .into_iter()
-            .filter(|peer_info| {
-                !peer_info.address.is_empty() // The peer has an address we can dial
-                && !active_peers.contains(&peer_info.peer_id) // The node is not already connected.
-                && !self.pending_dials.contains_key(&peer_info.peer_id) // There is no pending dial to this node.
-                && self.dial_backoff_states  // check that `now` is after the backoff time, if it exists
-                    .get(&peer_info.peer_id)
-                    .map(|state| now > state.backoff)
-                    .unwrap_or(true)
-            })
-            .collect::<Vec<_>>();
+            known_peers
+                .values()
+                .filter(|peer_info| {
+                    peer_info.peer_id != self.endpoint.peer_id() // We don't dial ourself
+                    && !peer_info.address.is_empty() // The peer has an address we can dial
+                    && !active_peers.contains(&peer_info.peer_id) // The node is not already connected.
+                    && !self.pending_dials.contains_key(&peer_info.peer_id) // There is no pending dial to this node.
+                    && self.dial_backoff_states  // check that `now` is after the backoff time, if it exists
+                        .get(&peer_info.peer_id)
+                        .map(|state| now > state.backoff)
+                        .unwrap_or(true)
+                })
+                .cloned()
+                .collect()
+        };
 
         // Limit the number of outstanding connections attempting to be established
         let number_to_dial = std::cmp::min(
@@ -377,19 +377,19 @@ impl ActivePeers {
 
     #[allow(unused)]
     pub fn subscribe(&self) -> (broadcast::Receiver<PeerEvent>, Vec<PeerId>) {
-        self.0.read().unwrap().subscribe()
+        self.inner().subscribe()
     }
 
     pub fn peers(&self) -> Vec<PeerId> {
-        self.0.read().unwrap().peers()
+        self.inner().peers()
     }
 
     pub fn get(&self, peer_id: &PeerId) -> Option<Connection> {
-        self.0.read().unwrap().get(peer_id)
+        self.inner().get(peer_id)
     }
 
     pub fn remove(&self, peer_id: &PeerId, reason: DisconnectReason) {
-        self.0.write().unwrap().remove(peer_id, reason)
+        self.inner_mut().remove(peer_id, reason)
     }
 
     pub fn remove_with_stable_id(
@@ -398,15 +398,21 @@ impl ActivePeers {
         stable_id: usize,
         reason: DisconnectReason,
     ) {
-        self.0
-            .write()
-            .unwrap()
+        self.inner_mut()
             .remove_with_stable_id(peer_id, stable_id, reason)
     }
 
     #[must_use]
     fn add(&self, own_peer_id: &PeerId, new_connection: Connection) -> Option<Connection> {
-        self.0.write().unwrap().add(own_peer_id, new_connection)
+        self.inner_mut().add(own_peer_id, new_connection)
+    }
+
+    fn inner(&self) -> std::sync::RwLockReadGuard<'_, ActivePeersInner> {
+        self.0.read().unwrap()
+    }
+
+    fn inner_mut(&self) -> std::sync::RwLockWriteGuard<'_, ActivePeersInner> {
+        self.0.write().unwrap()
     }
 }
 
@@ -437,6 +443,10 @@ impl ActivePeersInner {
 
     fn get(&self, peer_id: &PeerId) -> Option<Connection> {
         self.connections.get(peer_id).cloned()
+    }
+
+    fn contains(&self, peer_id: &PeerId) -> bool {
+        self.connections.contains_key(peer_id)
     }
 
     fn remove(&mut self, peer_id: &PeerId, reason: DisconnectReason) {
@@ -542,22 +552,30 @@ impl KnownPeers {
     }
 
     pub fn remove(&self, peer_id: &PeerId) -> Option<PeerInfo> {
-        self.0.write().unwrap().remove(peer_id)
+        self.inner_mut().remove(peer_id)
     }
 
     pub fn remove_all(&self) -> impl Iterator<Item = PeerInfo> {
-        std::mem::take(&mut *self.0.write().unwrap()).into_values()
+        std::mem::take(&mut *self.inner_mut()).into_values()
     }
 
     pub fn get(&self, peer_id: &PeerId) -> Option<PeerInfo> {
-        self.0.read().unwrap().get(peer_id).cloned()
+        self.inner().get(peer_id).cloned()
     }
 
     pub fn get_all(&self) -> Vec<PeerInfo> {
-        self.0.read().unwrap().values().cloned().collect()
+        self.inner().values().cloned().collect()
     }
 
     pub fn insert(&self, peer_info: PeerInfo) -> Option<PeerInfo> {
-        self.0.write().unwrap().insert(peer_info.peer_id, peer_info)
+        self.inner_mut().insert(peer_info.peer_id, peer_info)
+    }
+
+    fn inner(&self) -> std::sync::RwLockReadGuard<'_, HashMap<PeerId, PeerInfo>> {
+        self.0.read().unwrap()
+    }
+
+    fn inner_mut(&self) -> std::sync::RwLockWriteGuard<'_, HashMap<PeerId, PeerInfo>> {
+        self.0.write().unwrap()
     }
 }
