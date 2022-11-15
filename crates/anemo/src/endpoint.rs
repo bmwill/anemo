@@ -22,7 +22,7 @@ impl Endpoint {
         let local_addr = socket.local_addr()?;
         let server_config = config.server_config().clone();
         let endpoint = quinn::Endpoint::new(
-            Default::default(),
+            config.quinn_endpoint_config(),
             Some(server_config),
             socket,
             quinn::TokioRuntime,
