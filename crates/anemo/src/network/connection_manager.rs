@@ -358,7 +358,7 @@ impl DialBackoffState {
     ) {
         self.attempts += 1;
 
-        let backoff_duration = std::cmp::max(
+        let backoff_duration = std::cmp::min(
             max_backoff,
             backoff_step.saturating_mul(self.attempts.try_into().unwrap_or(u32::MAX)),
         );
@@ -577,5 +577,48 @@ impl KnownPeers {
 
     fn inner_mut(&self) -> std::sync::RwLockWriteGuard<'_, HashMap<PeerId, PeerInfo>> {
         self.0.write().unwrap()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DialBackoffState;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn backoff() {
+        // GIVEN
+        let now = Instant::now();
+
+        let back_off_step = Duration::from_secs(5);
+        let max_back_off = Duration::from_secs(60);
+
+        // WHEN
+        let mut state = DialBackoffState::new(now, back_off_step, max_back_off);
+
+        // THEN
+        assert_eq!(state.attempts, 1);
+        assert_eq!(state.backoff - now, back_off_step.saturating_mul(1));
+
+        // WHEN
+        for attempt in 2..=12 {
+            state.update(now, back_off_step, max_back_off);
+
+            // THEN
+            assert_eq!(state.attempts, attempt);
+            assert_eq!(
+                state.backoff - now,
+                back_off_step.saturating_mul(attempt as u32)
+            );
+        }
+
+        for attempt in 13..=15 {
+            // WHEN
+            state.update(now, back_off_step, max_back_off);
+
+            // THEN we should expect to get from now on only the max backoff
+            assert_eq!(state.attempts, attempt);
+            assert_eq!(state.backoff - now, max_back_off);
+        }
     }
 }
