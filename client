@@ -1,0 +1,356 @@
+2022-11-17T21:38:21.773912Z  INFO stateless_reset: address: 127.0.0.1:8080
+2022-11-17T21:38:21.775369Z TRACE quinn_proto::endpoint: initial_dcid=368c9c94649f837e4999c59284c6aa6e2855007a
+2022-11-17T21:38:21.776676Z TRACE quinn_proto::connection: wrote 269 Initial CRYPTO bytes
+2022-11-17T21:38:21.776940Z TRACE drive{id=0}:send{space=Initial pn=0}: quinn_proto::connection: CRYPTO: off 0 len 269
+2022-11-17T21:38:21.776979Z TRACE drive{id=0}:send{space=Initial pn=0}: quinn_proto::connection::packet_builder: PADDING * 872
+2022-11-17T21:38:21.777232Z TRACE drive{id=0}: quinn_proto::connection: sending 1200 bytes in 1 datagrams
+2022-11-17T21:38:21.784373Z TRACE drive{id=0}: quinn_proto::connection: got Initial packet (145 bytes) from 127.0.0.1:8081 using id c851d3e56e4a29e3
+2022-11-17T21:38:21.784626Z TRACE drive{id=0}:recv{space=Initial pn=0}: quinn_proto::connection: switching remote CID to 82a6872ccb8da9b3
+2022-11-17T21:38:21.784743Z TRACE drive{id=0}:recv{space=Initial pn=0}:frame{ty=CRYPTO}: quinn_proto::connection: consumed 90 CRYPTO bytes
+2022-11-17T21:38:21.785266Z TRACE drive{id=0}:recv{space=Initial pn=0}: quinn_proto::connection: Handshake keys ready
+2022-11-17T21:38:21.785299Z TRACE drive{id=0}: quinn_proto::connection: got Handshake packet (1055 bytes) from 127.0.0.1:8081 using id c851d3e56e4a29e3
+2022-11-17T21:38:21.785347Z TRACE drive{id=0}:recv{space=Handshake pn=0}:frame{ty=CRYPTO}: quinn_proto::connection: consumed 495 CRYPTO bytes
+2022-11-17T21:38:21.786232Z TRACE drive{id=0}:recv{space=Handshake pn=0}: quinn_proto::connection: Data keys ready
+2022-11-17T21:38:21.786284Z TRACE drive{id=0}:recv{space=Handshake pn=0}: quinn_proto::connection: wrote 342 Handshake CRYPTO bytes
+2022-11-17T21:38:21.786335Z TRACE drive{id=0}:recv{space=Handshake pn=0}: quinn_proto::connection: established
+2022-11-17T21:38:21.786364Z TRACE drive{id=0}: quinn_proto::connection: got Data packet (138 bytes) from 127.0.0.1:8081 using id c851d3e56e4a29e3
+2022-11-17T21:38:21.786405Z TRACE drive{id=0}:recv{space=Data pn=0}: quinn_proto::connection: got frame NewConnectionId(NewConnectionId { sequence: 1, retire_prior_to: 0, id: [115, 27, 134, 140, 177, 146, 132, 52], reset_token: ResetToken([23, 66, 197, 254, 77, 81, 66, 6, 74, 221, 140, 165, 13, 128, 35, 34]) })
+2022-11-17T21:38:21.786453Z TRACE drive{id=0}:recv{space=Data pn=0}:frame{ty=NEW_CONNECTION_ID}: quinn_proto::connection: sequence=1 id=731b868cb1928434 retire_prior_to=0
+2022-11-17T21:38:21.786490Z TRACE drive{id=0}:recv{space=Data pn=0}: quinn_proto::connection: got frame NewConnectionId(NewConnectionId { sequence: 2, retire_prior_to: 0, id: [87, 92, 99, 9, 253, 71, 163, 125], reset_token: ResetToken([92, 2, 119, 60, 238, 11, 40, 89, 157, 193, 226, 48, 253, 204, 252, 233]) })
+2022-11-17T21:38:21.786513Z TRACE drive{id=0}:recv{space=Data pn=0}:frame{ty=NEW_CONNECTION_ID}: quinn_proto::connection: sequence=2 id=575c6309fd47a37d retire_prior_to=0
+2022-11-17T21:38:21.786549Z TRACE drive{id=0}:recv{space=Data pn=0}: quinn_proto::connection: got frame NewConnectionId(NewConnectionId { sequence: 3, retire_prior_to: 0, id: [193, 32, 40, 8, 100, 52, 225, 20], reset_token: ResetToken([229, 235, 115, 194, 28, 35, 238, 61, 208, 254, 76, 1, 206, 143, 31, 83]) })
+2022-11-17T21:38:21.786570Z TRACE drive{id=0}:recv{space=Data pn=0}:frame{ty=NEW_CONNECTION_ID}: quinn_proto::connection: sequence=3 id=c12028086434e114 retire_prior_to=0
+2022-11-17T21:38:21.786605Z TRACE drive{id=0}:recv{space=Data pn=0}: quinn_proto::connection: got frame NewConnectionId(NewConnectionId { sequence: 4, retire_prior_to: 0, id: [184, 162, 5, 42, 222, 197, 148, 21], reset_token: ResetToken([96, 197, 210, 149, 208, 240, 120, 84, 33, 84, 212, 14, 76, 175, 224, 233]) })
+2022-11-17T21:38:21.786626Z TRACE drive{id=0}:recv{space=Data pn=0}:frame{ty=NEW_CONNECTION_ID}: quinn_proto::connection: sequence=4 id=b8a2052adec59415 retire_prior_to=0
+2022-11-17T21:38:21.786679Z TRACE drive{id=0}:send{space=Initial pn=1}: quinn_proto::connection: ACK ArrayRangeSet([0..1]), Delay = 0us
+2022-11-17T21:38:21.786714Z TRACE drive{id=0}: quinn_proto::connection: discarding Initial keys
+2022-11-17T21:38:21.786743Z TRACE drive{id=0}:send{space=Handshake pn=0}: quinn_proto::connection: ACK ArrayRangeSet([0..1]), Delay = 0us
+2022-11-17T21:38:21.786761Z TRACE drive{id=0}:send{space=Handshake pn=0}: quinn_proto::connection: CRYPTO: off 0 len 342
+2022-11-17T21:38:21.786816Z TRACE drive{id=0}:send{space=Data pn=0}: quinn_proto::connection: ACK ArrayRangeSet([0..1]), Delay = 0us
+2022-11-17T21:38:21.786835Z TRACE drive{id=0}:send{space=Data pn=0}: quinn_proto::connection::packet_builder: PADDING * 719
+2022-11-17T21:38:21.786874Z TRACE drive{id=0}: quinn_proto::connection: sending 1200 bytes in 1 datagrams
+2022-11-17T21:38:21.787021Z TRACE drive{id=0}:send{space=Data pn=1}: quinn_proto::connection: NEW_CONNECTION_ID sequence=1 id=6371cb3b523b6336
+2022-11-17T21:38:21.787047Z TRACE drive{id=0}:send{space=Data pn=1}: quinn_proto::connection: NEW_CONNECTION_ID sequence=2 id=f06c81d110424900
+2022-11-17T21:38:21.787068Z TRACE drive{id=0}:send{space=Data pn=1}: quinn_proto::connection: NEW_CONNECTION_ID sequence=3 id=0801f992d942956d
+2022-11-17T21:38:21.787087Z TRACE drive{id=0}:send{space=Data pn=1}: quinn_proto::connection: NEW_CONNECTION_ID sequence=4 id=bc9d21f6718ac45d
+2022-11-17T21:38:21.787131Z TRACE drive{id=0}: quinn_proto::connection: sending 138 bytes in 1 datagrams
+2022-11-17T21:38:21.787289Z TRACE quinn_proto::connection::streams: wrote 8 bytes stream=client bidirectional stream 0
+2022-11-17T21:38:21.787388Z TRACE drive{id=0}:send{space=Data pn=2}: quinn_proto::connection::streams::state: STREAM id=client bidirectional stream 0 off=0 len=8 fin=false
+2022-11-17T21:38:21.787436Z TRACE drive{id=0}: quinn_proto::connection: sending 37 bytes in 1 datagrams
+2022-11-17T21:38:21.787474Z TRACE quinn_proto::connection::streams: wrote 21 bytes stream=client bidirectional stream 0
+2022-11-17T21:38:21.787562Z TRACE drive{id=0}:send{space=Data pn=3}: quinn_proto::connection::streams::state: STREAM id=client bidirectional stream 0 off=8 len=21 fin=false
+2022-11-17T21:38:21.787627Z TRACE drive{id=0}: quinn_proto::connection: sending 51 bytes in 1 datagrams
+2022-11-17T21:38:21.787669Z TRACE quinn_proto::connection::streams: wrote 132 bytes stream=client bidirectional stream 0
+2022-11-17T21:38:21.787731Z TRACE drive{id=0}:send{space=Data pn=4}: quinn_proto::connection::streams::state: STREAM id=client bidirectional stream 0 off=29 len=132 fin=true
+2022-11-17T21:38:21.787772Z TRACE drive{id=0}: quinn_proto::connection: sending 163 bytes in 1 datagrams
+2022-11-17T21:38:21.789218Z TRACE drive{id=0}: quinn_proto::connection: got Data packet (122 bytes) from 127.0.0.1:8081 using id 6371cb3b523b6336
+2022-11-17T21:38:21.789268Z TRACE drive{id=0}:recv{space=Data pn=1}: quinn_proto::connection: got frame HandshakeDone
+2022-11-17T21:38:21.789285Z TRACE drive{id=0}:recv{space=Data pn=1}:frame{ty=HANDSHAKE_DONE}: quinn_proto::connection: discarding Handshake keys
+2022-11-17T21:38:21.789328Z TRACE drive{id=0}:recv{space=Data pn=1}: quinn_proto::connection: got frame Ack(Ack { largest: 4, delay: 0, ecn: Some(EcnCounts { ect0: 5, ect1: 0, ce: 0 }), ranges: "[0..=4]" })
+2022-11-17T21:38:21.789401Z TRACE drive{id=0}:recv{space=Data pn=1}: quinn_proto::connection: got crypto frame offset=0 len=81
+2022-11-17T21:38:21.789424Z TRACE drive{id=0}:recv{space=Data pn=1}:frame{ty=CRYPTO}: quinn_proto::connection: consumed 81 CRYPTO bytes
+2022-11-17T21:38:21.789502Z TRACE drive{id=0}:recv{space=Data pn=1}: quinn_proto::connection: got frame RetireConnectionId { sequence: 0 }
+2022-11-17T21:38:21.789546Z TRACE drive{id=0}:send{space=Data pn=5}: quinn_proto::connection: ACK ArrayRangeSet([1..2]), Delay = 0us
+2022-11-17T21:38:21.789578Z TRACE drive{id=0}: quinn_proto::connection: sending 34 bytes in 1 datagrams
+2022-11-17T21:38:21.789614Z TRACE quinn_proto::endpoint: peer retired CID 0: c851d3e56e4a29e3
+2022-11-17T21:38:21.789709Z TRACE drive{id=0}:send{space=Data pn=6}: quinn_proto::connection: NEW_CONNECTION_ID sequence=5 id=60ea3817098003f7
+2022-11-17T21:38:21.789745Z TRACE drive{id=0}: quinn_proto::connection: sending 54 bytes in 1 datagrams
+2022-11-17T21:38:21.790228Z TRACE drive{id=0}: quinn_proto::connection: got Data packet (195 bytes) from 127.0.0.1:8081 using id 6371cb3b523b6336
+2022-11-17T21:38:21.790266Z TRACE drive{id=0}:recv{space=Data pn=2}: quinn_proto::connection: got frame Ack(Ack { largest: 6, delay: 0, ecn: Some(EcnCounts { ect0: 7, ect1: 0, ce: 0 }), ranges: "[5..=6]" })
+2022-11-17T21:38:21.790310Z TRACE drive{id=0}:recv{space=Data pn=2}: quinn_proto::connection: got frame MaxStreams { dir: Bi, count: 100 }
+2022-11-17T21:38:21.790340Z TRACE drive{id=0}:recv{space=Data pn=2}: quinn_proto::connection: got stream frame id=client bidirectional stream 0 offset=0 len=154 fin=true
+2022-11-17T21:38:21.790389Z TRACE drive{id=0}:send{space=Data pn=7}: quinn_proto::connection: ACK ArrayRangeSet([2..3]), Delay = 0us
+2022-11-17T21:38:21.790419Z TRACE drive{id=0}: quinn_proto::connection: sending 34 bytes in 1 datagrams
+2022-11-17T21:38:21.790498Z  INFO stateless_reset: success
+2022-11-17T21:38:21.790823Z TRACE drive{id=0}: quinn_proto::connection: got Data packet (29 bytes) from 127.0.0.1:8081 using id 6371cb3b523b6336
+2022-11-17T21:38:21.790860Z TRACE drive{id=0}:recv{space=Data pn=3}: quinn_proto::connection: got frame MaxStreams { dir: Bi, count: 101 }
+2022-11-17T21:38:21.790900Z TRACE drive{id=0}:send{space=Data pn=8}: quinn_proto::connection: ACK ArrayRangeSet([2..4]), Delay = 0us
+2022-11-17T21:38:21.790930Z TRACE drive{id=0}: quinn_proto::connection: sending 34 bytes in 1 datagrams
+2022-11-17T21:38:22.245201Z TRACE drive{id=0}: quinn_proto::connection: got Data packet (191 bytes) from 127.0.0.1:8081 using id 6371cb3b523b6336
+2022-11-17T21:38:22.245343Z TRACE drive{id=0}:recv{space=Data pn=4}: quinn_proto::connection: got stream frame id=server bidirectional stream 0 offset=0 len=161 fin=true
+2022-11-17T21:38:22.245494Z TRACE drive{id=0}:send{space=Data pn=9}: quinn_proto::connection: ACK ArrayRangeSet([2..5]), Delay = 0us
+2022-11-17T21:38:22.245577Z TRACE drive{id=0}: quinn_proto::connection: sending 34 bytes in 1 datagrams
+2022-11-17T21:38:22.245936Z TRACE quinn_proto::connection::streams: wrote 8 bytes stream=server bidirectional stream 0
+2022-11-17T21:38:22.245979Z TRACE quinn_proto::connection::streams: wrote 14 bytes stream=server bidirectional stream 0
+2022-11-17T21:38:22.246006Z TRACE quinn_proto::connection::streams: wrote 132 bytes stream=server bidirectional stream 0
+2022-11-17T21:38:22.246102Z TRACE drive{id=0}:send{space=Data pn=10}: quinn_proto::connection::streams::state: MAX_STREAMS (bidirectional) value=100
+2022-11-17T21:38:22.246140Z TRACE drive{id=0}:send{space=Data pn=10}: quinn_proto::connection::streams::state: STREAM id=server bidirectional stream 0 off=0 len=154 fin=true
+2022-11-17T21:38:22.246213Z TRACE drive{id=0}: quinn_proto::connection: sending 187 bytes in 1 datagrams
+2022-11-17T21:38:22.246992Z TRACE drive{id=0}: quinn_proto::connection: got Data packet (34 bytes) from 127.0.0.1:8081 using id 6371cb3b523b6336
+2022-11-17T21:38:22.247077Z TRACE drive{id=0}:recv{space=Data pn=5}: quinn_proto::connection: got frame Ack(Ack { largest: 10, delay: 0, ecn: Some(EcnCounts { ect0: 11, ect1: 0, ce: 0 }), ranges: "[7..=10]" })
+2022-11-17T21:38:22.247618Z TRACE drive{id=0}:send{space=Data pn=11}: quinn_proto::connection::streams::state: MAX_STREAMS (bidirectional) value=101
+2022-11-17T21:38:22.247743Z TRACE drive{id=0}: quinn_proto::connection: sending 29 bytes in 1 datagrams
+2022-11-17T21:38:22.249237Z TRACE drive{id=0}: quinn_proto::connection: got Data packet (34 bytes) from 127.0.0.1:8081 using id 6371cb3b523b6336
+2022-11-17T21:38:22.249313Z TRACE drive{id=0}:recv{space=Data pn=6}: quinn_proto::connection: got frame Ack(Ack { largest: 11, delay: 0, ecn: Some(EcnCounts { ect0: 12, ect1: 0, ce: 0 }), ranges: "[7..=11]" })
+2022-11-17T21:38:22.776526Z TRACE quinn_proto::connection::streams: wrote 8 bytes stream=client bidirectional stream 1
+2022-11-17T21:38:22.777023Z TRACE quinn_proto::connection::streams: wrote 21 bytes stream=client bidirectional stream 1
+2022-11-17T21:38:22.777117Z TRACE quinn_proto::connection::streams: wrote 132 bytes stream=client bidirectional stream 1
+2022-11-17T21:38:22.778000Z TRACE drive{id=0}:send{space=Data pn=12}: quinn_proto::connection::streams::state: STREAM id=client bidirectional stream 1 off=0 len=161 fin=true
+2022-11-17T21:38:22.778536Z TRACE drive{id=0}: quinn_proto::connection: sending 191 bytes in 1 datagrams
+2022-11-17T21:38:22.782272Z TRACE drive{id=0}: quinn_proto::connection: got Data packet (34 bytes) from 127.0.0.1:8081 using id 6371cb3b523b6336
+2022-11-17T21:38:22.782426Z TRACE drive{id=0}:recv{space=Data pn=7}: quinn_proto::connection: got frame Ack(Ack { largest: 12, delay: 0, ecn: Some(EcnCounts { ect0: 13, ect1: 0, ce: 0 }), ranges: "[7..=12]" })
+2022-11-17T21:38:22.782717Z TRACE drive{id=0}: quinn_proto::connection: got Data packet (187 bytes) from 127.0.0.1:8081 using id 6371cb3b523b6336
+2022-11-17T21:38:22.782786Z TRACE drive{id=0}:recv{space=Data pn=8}: quinn_proto::connection: got frame MaxStreams { dir: Bi, count: 101 }
+2022-11-17T21:38:22.782846Z TRACE drive{id=0}:recv{space=Data pn=8}: quinn_proto::connection: got stream frame id=client bidirectional stream 1 offset=0 len=154 fin=true
+2022-11-17T21:38:22.782951Z TRACE drive{id=0}:send{space=Data pn=13}: quinn_proto::connection: ACK ArrayRangeSet([5..9]), Delay = 0us
+2022-11-17T21:38:22.783019Z TRACE drive{id=0}: quinn_proto::connection: sending 34 bytes in 1 datagrams
+2022-11-17T21:38:22.783209Z  INFO stateless_reset: success
+2022-11-17T21:38:22.783816Z TRACE drive{id=0}: quinn_proto::connection: got Data packet (29 bytes) from 127.0.0.1:8081 using id 6371cb3b523b6336
+2022-11-17T21:38:22.783899Z TRACE drive{id=0}:recv{space=Data pn=9}: quinn_proto::connection: got frame MaxStreams { dir: Bi, count: 102 }
+2022-11-17T21:38:22.783980Z TRACE drive{id=0}:send{space=Data pn=14}: quinn_proto::connection: ACK ArrayRangeSet([5..10]), Delay = 0us
+2022-11-17T21:38:22.784036Z TRACE drive{id=0}: quinn_proto::connection: sending 34 bytes in 1 datagrams
+2022-11-17T21:38:23.242634Z TRACE drive{id=0}: quinn_proto::connection: got Data packet (37 bytes) from 127.0.0.1:8081 using id 6371cb3b523b6336
+2022-11-17T21:38:23.242824Z TRACE drive{id=0}:recv{space=Data pn=10}: quinn_proto::connection: got stream frame id=server bidirectional stream 1 offset=0 len=8 fin=false
+2022-11-17T21:38:23.242971Z TRACE drive{id=0}: quinn_proto::connection: got Data packet (184 bytes) from 127.0.0.1:8081 using id 6371cb3b523b6336
+2022-11-17T21:38:23.243046Z TRACE drive{id=0}:recv{space=Data pn=11}: quinn_proto::connection: got stream frame id=server bidirectional stream 1 offset=8 len=153 fin=false
+2022-11-17T21:38:23.243191Z TRACE drive{id=0}:send{space=Data pn=15}: quinn_proto::connection: ACK ArrayRangeSet([5..12]), Delay = 0us
+2022-11-17T21:38:23.243294Z TRACE drive{id=0}: quinn_proto::connection: sending 34 bytes in 1 datagrams
+2022-11-17T21:38:23.243628Z TRACE drive{id=0}: quinn_proto::connection: got Data packet (31 bytes) from 127.0.0.1:8081 using id 6371cb3b523b6336
+2022-11-17T21:38:23.243800Z TRACE drive{id=0}:recv{space=Data pn=12}: quinn_proto::connection: got stream frame id=server bidirectional stream 1 offset=161 len=0 fin=true
+2022-11-17T21:38:23.244012Z TRACE drive{id=0}:send{space=Data pn=16}: quinn_proto::connection: ACK ArrayRangeSet([5..13]), Delay = 0us
+2022-11-17T21:38:23.244132Z TRACE drive{id=0}: quinn_proto::connection: sending 34 bytes in 1 datagrams
+2022-11-17T21:38:23.244501Z TRACE quinn_proto::connection::streams: wrote 8 bytes stream=server bidirectional stream 1
+2022-11-17T21:38:23.244590Z TRACE quinn_proto::connection::streams: wrote 14 bytes stream=server bidirectional stream 1
+2022-11-17T21:38:23.244638Z TRACE quinn_proto::connection::streams: wrote 132 bytes stream=server bidirectional stream 1
+2022-11-17T21:38:23.244803Z TRACE drive{id=0}:send{space=Data pn=17}: quinn_proto::connection::streams::state: MAX_STREAMS (bidirectional) value=101
+2022-11-17T21:38:23.244862Z TRACE drive{id=0}:send{space=Data pn=17}: quinn_proto::connection::streams::state: STREAM id=server bidirectional stream 1 off=0 len=154 fin=true
+2022-11-17T21:38:23.244979Z TRACE drive{id=0}: quinn_proto::connection: sending 187 bytes in 1 datagrams
+2022-11-17T21:38:23.246091Z TRACE drive{id=0}: quinn_proto::connection: got Data packet (34 bytes) from 127.0.0.1:8081 using id 6371cb3b523b6336
+2022-11-17T21:38:23.246195Z TRACE drive{id=0}:recv{space=Data pn=13}: quinn_proto::connection: got frame Ack(Ack { largest: 17, delay: 0, ecn: Some(EcnCounts { ect0: 18, ect1: 0, ce: 0 }), ranges: "[13..=17]" })
+2022-11-17T21:38:23.246429Z TRACE drive{id=0}:send{space=Data pn=18}: quinn_proto::connection::streams::state: MAX_STREAMS (bidirectional) value=102
+2022-11-17T21:38:23.246491Z TRACE drive{id=0}: quinn_proto::connection: sending 29 bytes in 1 datagrams
+2022-11-17T21:38:23.247230Z TRACE drive{id=0}: quinn_proto::connection: got Data packet (34 bytes) from 127.0.0.1:8081 using id 6371cb3b523b6336
+2022-11-17T21:38:23.247340Z TRACE drive{id=0}:recv{space=Data pn=14}: quinn_proto::connection: got frame Ack(Ack { largest: 18, delay: 0, ecn: Some(EcnCounts { ect0: 19, ect1: 0, ce: 0 }), ranges: "[13..=18]" })
+2022-11-17T21:38:23.777364Z TRACE quinn_proto::connection::streams: wrote 8 bytes stream=client bidirectional stream 2
+2022-11-17T21:38:23.777930Z TRACE quinn_proto::connection::streams: wrote 21 bytes stream=client bidirectional stream 2
+2022-11-17T21:38:23.778031Z TRACE quinn_proto::connection::streams: wrote 132 bytes stream=client bidirectional stream 2
+2022-11-17T21:38:23.778854Z TRACE drive{id=0}:send{space=Data pn=19}: quinn_proto::connection::streams::state: STREAM id=client bidirectional stream 2 off=0 len=161 fin=true
+2022-11-17T21:38:23.779450Z TRACE drive{id=0}: quinn_proto::connection: sending 191 bytes in 1 datagrams
+2022-11-17T21:38:23.783044Z TRACE drive{id=0}: quinn_proto::connection: got Data packet (34 bytes) from 127.0.0.1:8081 using id 6371cb3b523b6336
+2022-11-17T21:38:23.783230Z TRACE drive{id=0}:recv{space=Data pn=15}: quinn_proto::connection: got frame Ack(Ack { largest: 19, delay: 0, ecn: Some(EcnCounts { ect0: 20, ect1: 0, ce: 0 }), ranges: "[13..=19]" })
+2022-11-17T21:38:23.783712Z TRACE drive{id=0}: quinn_proto::connection: got Data packet (187 bytes) from 127.0.0.1:8081 using id 6371cb3b523b6336
+2022-11-17T21:38:23.783884Z TRACE drive{id=0}:recv{space=Data pn=16}: quinn_proto::connection: got frame MaxStreams { dir: Bi, count: 102 }
+2022-11-17T21:38:23.784000Z TRACE drive{id=0}:recv{space=Data pn=16}: quinn_proto::connection: got stream frame id=client bidirectional stream 2 offset=0 len=154 fin=true
+2022-11-17T21:38:23.784213Z TRACE drive{id=0}:send{space=Data pn=20}: quinn_proto::connection: ACK ArrayRangeSet([13..17]), Delay = 0us
+2022-11-17T21:38:23.784330Z TRACE drive{id=0}: quinn_proto::connection: sending 34 bytes in 1 datagrams
+2022-11-17T21:38:23.784546Z  INFO stateless_reset: success
+2022-11-17T21:38:23.785898Z TRACE drive{id=0}: quinn_proto::connection: got Data packet (29 bytes) from 127.0.0.1:8081 using id 6371cb3b523b6336
+2022-11-17T21:38:23.786021Z TRACE drive{id=0}:recv{space=Data pn=17}: quinn_proto::connection: got frame MaxStreams { dir: Bi, count: 103 }
+2022-11-17T21:38:23.786155Z TRACE drive{id=0}:send{space=Data pn=21}: quinn_proto::connection: ACK ArrayRangeSet([13..18]), Delay = 0us
+2022-11-17T21:38:23.786250Z TRACE drive{id=0}: quinn_proto::connection: sending 34 bytes in 1 datagrams
+2022-11-17T21:38:24.242139Z TRACE drive{id=0}: quinn_proto::connection: got Data packet (191 bytes) from 127.0.0.1:8081 using id 6371cb3b523b6336
+2022-11-17T21:38:24.242404Z TRACE drive{id=0}:recv{space=Data pn=18}: quinn_proto::connection: got stream frame id=server bidirectional stream 2 offset=0 len=161 fin=true
+2022-11-17T21:38:24.242713Z TRACE drive{id=0}:send{space=Data pn=22}: quinn_proto::connection: ACK ArrayRangeSet([13..19]), Delay = 0us
+2022-11-17T21:38:24.242929Z TRACE drive{id=0}: quinn_proto::connection: sending 34 bytes in 1 datagrams
+2022-11-17T21:38:24.243665Z TRACE quinn_proto::connection::streams: wrote 8 bytes stream=server bidirectional stream 2
+2022-11-17T21:38:24.243733Z TRACE quinn_proto::connection::streams: wrote 14 bytes stream=server bidirectional stream 2
+2022-11-17T21:38:24.243764Z TRACE quinn_proto::connection::streams: wrote 132 bytes stream=server bidirectional stream 2
+2022-11-17T21:38:24.243878Z TRACE drive{id=0}:send{space=Data pn=23}: quinn_proto::connection::streams::state: MAX_STREAMS (bidirectional) value=102
+2022-11-17T21:38:24.243927Z TRACE drive{id=0}:send{space=Data pn=23}: quinn_proto::connection::streams::state: STREAM id=server bidirectional stream 2 off=0 len=154 fin=true
+2022-11-17T21:38:24.244028Z TRACE drive{id=0}: quinn_proto::connection: sending 187 bytes in 1 datagrams
+2022-11-17T21:38:24.245118Z TRACE drive{id=0}: quinn_proto::connection: got Data packet (34 bytes) from 127.0.0.1:8081 using id 6371cb3b523b6336
+2022-11-17T21:38:24.245206Z TRACE drive{id=0}:recv{space=Data pn=19}: quinn_proto::connection: got frame Ack(Ack { largest: 23, delay: 0, ecn: Some(EcnCounts { ect0: 24, ect1: 0, ce: 0 }), ranges: "[20..=23]" })
+2022-11-17T21:38:24.245416Z TRACE drive{id=0}:send{space=Data pn=24}: quinn_proto::connection::streams::state: MAX_STREAMS (bidirectional) value=103
+2022-11-17T21:38:24.245477Z TRACE drive{id=0}: quinn_proto::connection: sending 29 bytes in 1 datagrams
+2022-11-17T21:38:24.246139Z TRACE drive{id=0}: quinn_proto::connection: got Data packet (34 bytes) from 127.0.0.1:8081 using id 6371cb3b523b6336
+2022-11-17T21:38:24.246210Z TRACE drive{id=0}:recv{space=Data pn=20}: quinn_proto::connection: got frame Ack(Ack { largest: 24, delay: 0, ecn: Some(EcnCounts { ect0: 25, ect1: 0, ce: 0 }), ranges: "[20..=24]" })
+2022-11-17T21:38:24.776707Z TRACE quinn_proto::connection::streams: wrote 8 bytes stream=client bidirectional stream 3
+2022-11-17T21:38:24.776853Z TRACE quinn_proto::connection::streams: wrote 21 bytes stream=client bidirectional stream 3
+2022-11-17T21:38:24.776984Z TRACE drive{id=0}:send{space=Data pn=25}: quinn_proto::connection::streams::state: STREAM id=client bidirectional stream 3 off=0 len=29 fin=false
+2022-11-17T21:38:24.777091Z TRACE drive{id=0}: quinn_proto::connection: sending 58 bytes in 1 datagrams
+2022-11-17T21:38:24.777184Z TRACE quinn_proto::connection::streams: wrote 132 bytes stream=client bidirectional stream 3
+2022-11-17T21:38:24.777495Z TRACE drive{id=0}:send{space=Data pn=26}: quinn_proto::connection::streams::state: STREAM id=client bidirectional stream 3 off=29 len=132 fin=true
+2022-11-17T21:38:24.777680Z TRACE drive{id=0}: quinn_proto::connection: sending 163 bytes in 1 datagrams
+2022-11-17T21:38:24.818107Z TRACE drive{id=0}: quinn_proto::connection: timeout timer=LossDetection
+2022-11-17T21:38:24.818150Z TRACE drive{id=0}: quinn_proto::connection: PTO fired in_flight=221 count=0 space=Data
+2022-11-17T21:38:24.818272Z TRACE drive{id=0}:send{space=Data pn=27}: quinn_proto::connection: PING
+2022-11-17T21:38:24.818302Z TRACE drive{id=0}:send{space=Data pn=27}: quinn_proto::connection::packet_builder: PADDING * 2
+2022-11-17T21:38:24.818367Z TRACE drive{id=0}: quinn_proto::connection: sending 29 bytes in 1 datagrams
+2022-11-17T21:38:24.818410Z TRACE drive{id=0}:send{space=Data pn=28}: quinn_proto::connection: PING
+2022-11-17T21:38:24.818432Z TRACE drive{id=0}:send{space=Data pn=28}: quinn_proto::connection::packet_builder: PADDING * 2
+2022-11-17T21:38:24.818468Z TRACE drive{id=0}: quinn_proto::connection: sending 29 bytes in 1 datagrams
+2022-11-17T21:38:24.898834Z TRACE drive{id=0}: quinn_proto::connection: timeout timer=LossDetection
+2022-11-17T21:38:24.898881Z TRACE drive{id=0}: quinn_proto::connection: PTO fired in_flight=279 count=1 space=Data
+2022-11-17T21:38:24.899009Z TRACE drive{id=0}:send{space=Data pn=29}: quinn_proto::connection: PING
+2022-11-17T21:38:24.899044Z TRACE drive{id=0}:send{space=Data pn=29}: quinn_proto::connection::packet_builder: PADDING * 2
+2022-11-17T21:38:24.899110Z TRACE drive{id=0}: quinn_proto::connection: sending 29 bytes in 1 datagrams
+2022-11-17T21:38:24.899206Z TRACE drive{id=0}:send{space=Data pn=30}: quinn_proto::connection: PING
+2022-11-17T21:38:24.899234Z TRACE drive{id=0}:send{space=Data pn=30}: quinn_proto::connection::packet_builder: PADDING * 2
+2022-11-17T21:38:24.899274Z TRACE drive{id=0}: quinn_proto::connection: sending 29 bytes in 1 datagrams
+2022-11-17T21:38:25.056723Z TRACE drive{id=0}: quinn_proto::connection: timeout timer=LossDetection
+2022-11-17T21:38:25.056780Z TRACE drive{id=0}: quinn_proto::connection: PTO fired in_flight=337 count=2 space=Data
+2022-11-17T21:38:25.056940Z TRACE drive{id=0}:send{space=Data pn=31}: quinn_proto::connection: PING
+2022-11-17T21:38:25.056980Z TRACE drive{id=0}:send{space=Data pn=31}: quinn_proto::connection::packet_builder: PADDING * 2
+2022-11-17T21:38:25.057059Z TRACE drive{id=0}: quinn_proto::connection: sending 29 bytes in 1 datagrams
+2022-11-17T21:38:25.057122Z TRACE drive{id=0}:send{space=Data pn=32}: quinn_proto::connection: PING
+2022-11-17T21:38:25.057150Z TRACE drive{id=0}:send{space=Data pn=32}: quinn_proto::connection::packet_builder: PADDING * 2
+2022-11-17T21:38:25.057195Z TRACE drive{id=0}: quinn_proto::connection: sending 29 bytes in 1 datagrams
+2022-11-17T21:38:25.371355Z TRACE drive{id=0}: quinn_proto::connection: timeout timer=LossDetection
+2022-11-17T21:38:25.371673Z TRACE drive{id=0}: quinn_proto::connection: PTO fired in_flight=395 count=3 space=Data
+2022-11-17T21:38:25.372247Z TRACE drive{id=0}:send{space=Data pn=33}: quinn_proto::connection: PING
+2022-11-17T21:38:25.372400Z TRACE drive{id=0}:send{space=Data pn=33}: quinn_proto::connection::packet_builder: PADDING * 2
+2022-11-17T21:38:25.372811Z TRACE drive{id=0}: quinn_proto::connection: sending 29 bytes in 1 datagrams
+2022-11-17T21:38:25.373009Z TRACE drive{id=0}:send{space=Data pn=34}: quinn_proto::connection: PING
+2022-11-17T21:38:25.373120Z TRACE drive{id=0}:send{space=Data pn=34}: quinn_proto::connection::packet_builder: PADDING * 2
+2022-11-17T21:38:25.373292Z TRACE drive{id=0}: quinn_proto::connection: sending 29 bytes in 1 datagrams
+2022-11-17T21:38:25.997944Z TRACE drive{id=0}: quinn_proto::connection: timeout timer=LossDetection
+2022-11-17T21:38:25.997977Z TRACE drive{id=0}: quinn_proto::connection: PTO fired in_flight=453 count=4 space=Data
+2022-11-17T21:38:25.998072Z TRACE drive{id=0}:send{space=Data pn=35}: quinn_proto::connection: PING
+2022-11-17T21:38:25.998096Z TRACE drive{id=0}:send{space=Data pn=35}: quinn_proto::connection::packet_builder: PADDING * 2
+2022-11-17T21:38:25.998141Z TRACE drive{id=0}: quinn_proto::connection: sending 29 bytes in 1 datagrams
+2022-11-17T21:38:25.998177Z TRACE drive{id=0}:send{space=Data pn=36}: quinn_proto::connection: PING
+2022-11-17T21:38:25.998194Z TRACE drive{id=0}:send{space=Data pn=36}: quinn_proto::connection::packet_builder: PADDING * 2
+2022-11-17T21:38:25.998229Z TRACE drive{id=0}: quinn_proto::connection: sending 29 bytes in 1 datagrams
+2022-11-17T21:38:25.999210Z TRACE drive{id=0}: quinn_proto::connection: unable to complete packet decoding: invalid header: packet too short to extract header protection sample
+2022-11-17T21:38:25.999228Z TRACE drive{id=0}: quinn_proto::connection: unable to complete packet decoding: invalid header: packet too short to extract header protection sample
+2022-11-17T21:38:27.247192Z TRACE drive{id=0}: quinn_proto::connection: timeout timer=LossDetection
+2022-11-17T21:38:27.247421Z TRACE drive{id=0}: quinn_proto::connection: PTO fired in_flight=511 count=5 space=Data
+2022-11-17T21:38:27.248007Z TRACE drive{id=0}:send{space=Data pn=37}: quinn_proto::connection: PING
+2022-11-17T21:38:27.248163Z TRACE drive{id=0}:send{space=Data pn=37}: quinn_proto::connection::packet_builder: PADDING * 2
+2022-11-17T21:38:27.248486Z TRACE drive{id=0}: quinn_proto::connection: sending 29 bytes in 1 datagrams
+2022-11-17T21:38:27.248642Z TRACE drive{id=0}:send{space=Data pn=38}: quinn_proto::connection: PING
+2022-11-17T21:38:27.248705Z TRACE drive{id=0}:send{space=Data pn=38}: quinn_proto::connection::packet_builder: PADDING * 2
+2022-11-17T21:38:27.248804Z TRACE drive{id=0}: quinn_proto::connection: sending 29 bytes in 1 datagrams
+2022-11-17T21:38:27.251002Z TRACE drive{id=0}: quinn_proto::connection: unable to complete packet decoding: invalid header: packet too short to extract header protection sample
+2022-11-17T21:38:27.251044Z TRACE drive{id=0}: quinn_proto::connection: unable to complete packet decoding: invalid header: packet too short to extract header protection sample
+2022-11-17T21:38:29.743850Z TRACE drive{id=0}: quinn_proto::connection: timeout timer=LossDetection
+2022-11-17T21:38:29.743890Z TRACE drive{id=0}: quinn_proto::connection: PTO fired in_flight=569 count=6 space=Data
+2022-11-17T21:38:29.744020Z TRACE drive{id=0}:send{space=Data pn=39}: quinn_proto::connection: PING
+2022-11-17T21:38:29.744050Z TRACE drive{id=0}:send{space=Data pn=39}: quinn_proto::connection::packet_builder: PADDING * 2
+2022-11-17T21:38:29.744109Z TRACE drive{id=0}: quinn_proto::connection: sending 29 bytes in 1 datagrams
+2022-11-17T21:38:29.744158Z TRACE drive{id=0}:send{space=Data pn=40}: quinn_proto::connection: PING
+2022-11-17T21:38:29.744181Z TRACE drive{id=0}:send{space=Data pn=40}: quinn_proto::connection::packet_builder: PADDING * 2
+2022-11-17T21:38:29.744218Z TRACE drive{id=0}: quinn_proto::connection: sending 29 bytes in 1 datagrams
+2022-11-17T21:38:29.744790Z TRACE drive{id=0}: quinn_proto::connection: unable to complete packet decoding: invalid header: packet too short to extract header protection sample
+2022-11-17T21:38:29.744821Z TRACE drive{id=0}: quinn_proto::connection: unable to complete packet decoding: invalid header: packet too short to extract header protection sample
+2022-11-17T21:38:34.734385Z TRACE drive{id=0}: quinn_proto::connection: timeout timer=LossDetection
+2022-11-17T21:38:34.734605Z TRACE drive{id=0}: quinn_proto::connection: PTO fired in_flight=627 count=7 space=Data
+2022-11-17T21:38:34.735191Z TRACE drive{id=0}:send{space=Data pn=41}: quinn_proto::connection: PING
+2022-11-17T21:38:34.735352Z TRACE drive{id=0}:send{space=Data pn=41}: quinn_proto::connection::packet_builder: PADDING * 2
+2022-11-17T21:38:34.736512Z TRACE drive{id=0}: quinn_proto::connection: sending 29 bytes in 1 datagrams
+2022-11-17T21:38:34.736655Z TRACE drive{id=0}:send{space=Data pn=42}: quinn_proto::connection: PING
+2022-11-17T21:38:34.736721Z TRACE drive{id=0}:send{space=Data pn=42}: quinn_proto::connection::packet_builder: PADDING * 2
+2022-11-17T21:38:34.736831Z TRACE drive{id=0}: quinn_proto::connection: sending 29 bytes in 1 datagrams
+2022-11-17T21:38:34.738627Z TRACE drive{id=0}: quinn_proto::connection: unable to complete packet decoding: invalid header: packet too short to extract header protection sample
+2022-11-17T21:38:34.738673Z TRACE drive{id=0}: quinn_proto::connection: unable to complete packet decoding: invalid header: packet too short to extract header protection sample
+2022-11-17T21:38:34.779217Z TRACE drive{id=0}: quinn_proto::connection: timeout timer=Idle
+2022-11-17T21:38:34.779271Z TRACE drive{id=0}: quinn_proto::connection: connection closed
+2022-11-17T21:38:34.781241Z  INFO stateless_reset: connection lost
+2022-11-17T21:38:34.781654Z TRACE quinn_proto::endpoint: initial_dcid=d689fa2400c3157b43e36a320f99a273e160c7df
+2022-11-17T21:38:34.783147Z TRACE quinn_proto::connection: wrote 360 Initial CRYPTO bytes
+2022-11-17T21:38:34.783391Z TRACE drive{id=0}:send{space=Initial pn=0}: quinn_proto::connection: CRYPTO: off 0 len 360
+2022-11-17T21:38:34.783440Z TRACE drive{id=0}:send{space=Initial pn=0}: quinn_proto::connection::packet_builder: PADDING * 781
+2022-11-17T21:38:34.783547Z TRACE drive{id=0}: quinn_proto::connection: sending 1200 bytes in 1 datagrams
+2022-11-17T21:38:34.790185Z TRACE drive{id=0}: quinn_proto::connection: got Initial packet (145 bytes) from 127.0.0.1:8081 using id e130af5144bd0256
+2022-11-17T21:38:34.790263Z TRACE drive{id=0}:recv{space=Initial pn=0}: quinn_proto::connection: switching remote CID to 021b1a6a84a5d10c
+2022-11-17T21:38:34.790388Z TRACE drive{id=0}:recv{space=Initial pn=0}:frame{ty=CRYPTO}: quinn_proto::connection: consumed 90 CRYPTO bytes
+2022-11-17T21:38:34.791035Z TRACE drive{id=0}:recv{space=Initial pn=0}: quinn_proto::connection: Handshake keys ready
+2022-11-17T21:38:34.791086Z TRACE drive{id=0}: quinn_proto::connection: got Handshake packet (1055 bytes) from 127.0.0.1:8081 using id e130af5144bd0256
+2022-11-17T21:38:34.791158Z TRACE drive{id=0}:recv{space=Handshake pn=0}:frame{ty=CRYPTO}: quinn_proto::connection: consumed 495 CRYPTO bytes
+2022-11-17T21:38:34.792740Z TRACE drive{id=0}:recv{space=Handshake pn=0}: quinn_proto::connection: Data keys ready
+2022-11-17T21:38:34.792836Z TRACE drive{id=0}:recv{space=Handshake pn=0}: quinn_proto::connection: wrote 342 Handshake CRYPTO bytes
+2022-11-17T21:38:34.792928Z TRACE drive{id=0}:recv{space=Handshake pn=0}: quinn_proto::connection: established
+2022-11-17T21:38:34.792976Z TRACE drive{id=0}: quinn_proto::connection: got Data packet (138 bytes) from 127.0.0.1:8081 using id e130af5144bd0256
+2022-11-17T21:38:34.793055Z TRACE drive{id=0}:recv{space=Data pn=0}: quinn_proto::connection: got frame NewConnectionId(NewConnectionId { sequence: 1, retire_prior_to: 0, id: [208, 98, 21, 1, 121, 248, 255, 150], reset_token: ResetToken([227, 242, 56, 123, 199, 19, 233, 26, 28, 24, 248, 101, 201, 223, 69, 105]) })
+2022-11-17T21:38:34.793097Z TRACE drive{id=0}:recv{space=Data pn=0}:frame{ty=NEW_CONNECTION_ID}: quinn_proto::connection: sequence=1 id=d062150179f8ff96 retire_prior_to=0
+2022-11-17T21:38:34.793162Z TRACE drive{id=0}:recv{space=Data pn=0}: quinn_proto::connection: got frame NewConnectionId(NewConnectionId { sequence: 2, retire_prior_to: 0, id: [44, 224, 121, 212, 89, 121, 72, 156], reset_token: ResetToken([217, 133, 169, 236, 109, 130, 198, 187, 57, 44, 126, 240, 121, 224, 181, 72]) })
+2022-11-17T21:38:34.793199Z TRACE drive{id=0}:recv{space=Data pn=0}:frame{ty=NEW_CONNECTION_ID}: quinn_proto::connection: sequence=2 id=2ce079d45979489c retire_prior_to=0
+2022-11-17T21:38:34.793260Z TRACE drive{id=0}:recv{space=Data pn=0}: quinn_proto::connection: got frame NewConnectionId(NewConnectionId { sequence: 3, retire_prior_to: 0, id: [205, 108, 6, 97, 116, 80, 173, 237], reset_token: ResetToken([147, 32, 76, 31, 49, 213, 48, 253, 135, 114, 128, 49, 129, 36, 59, 90]) })
+2022-11-17T21:38:34.793295Z TRACE drive{id=0}:recv{space=Data pn=0}:frame{ty=NEW_CONNECTION_ID}: quinn_proto::connection: sequence=3 id=cd6c06617450aded retire_prior_to=0
+2022-11-17T21:38:34.793355Z TRACE drive{id=0}:recv{space=Data pn=0}: quinn_proto::connection: got frame NewConnectionId(NewConnectionId { sequence: 4, retire_prior_to: 0, id: [9, 146, 163, 173, 101, 127, 249, 39], reset_token: ResetToken([187, 116, 219, 94, 126, 158, 106, 61, 41, 36, 233, 44, 248, 243, 41, 109]) })
+2022-11-17T21:38:34.793390Z TRACE drive{id=0}:recv{space=Data pn=0}:frame{ty=NEW_CONNECTION_ID}: quinn_proto::connection: sequence=4 id=0992a3ad657ff927 retire_prior_to=0
+2022-11-17T21:38:34.793485Z TRACE drive{id=0}:send{space=Initial pn=1}: quinn_proto::connection: ACK ArrayRangeSet([0..1]), Delay = 0us
+2022-11-17T21:38:34.793545Z TRACE drive{id=0}: quinn_proto::connection: discarding Initial keys
+2022-11-17T21:38:34.793597Z TRACE drive{id=0}:send{space=Handshake pn=0}: quinn_proto::connection: ACK ArrayRangeSet([0..1]), Delay = 0us
+2022-11-17T21:38:34.793627Z TRACE drive{id=0}:send{space=Handshake pn=0}: quinn_proto::connection: CRYPTO: off 0 len 342
+2022-11-17T21:38:34.793703Z TRACE drive{id=0}:send{space=Data pn=0}: quinn_proto::connection: ACK ArrayRangeSet([0..1]), Delay = 0us
+2022-11-17T21:38:34.793736Z TRACE drive{id=0}:send{space=Data pn=0}: quinn_proto::connection::packet_builder: PADDING * 719
+2022-11-17T21:38:34.793800Z TRACE drive{id=0}: quinn_proto::connection: sending 1200 bytes in 1 datagrams
+2022-11-17T21:38:34.794063Z TRACE drive{id=0}:send{space=Data pn=1}: quinn_proto::connection: NEW_CONNECTION_ID sequence=1 id=c572a030c30af7f6
+2022-11-17T21:38:34.794109Z TRACE drive{id=0}:send{space=Data pn=1}: quinn_proto::connection: NEW_CONNECTION_ID sequence=2 id=ee62ca18eeb9c18a
+2022-11-17T21:38:34.794146Z TRACE drive{id=0}:send{space=Data pn=1}: quinn_proto::connection: NEW_CONNECTION_ID sequence=3 id=f0ed99590df98b46
+2022-11-17T21:38:34.794181Z TRACE drive{id=0}:send{space=Data pn=1}: quinn_proto::connection: NEW_CONNECTION_ID sequence=4 id=b1d78d8647567354
+2022-11-17T21:38:34.794244Z TRACE drive{id=0}: quinn_proto::connection: sending 138 bytes in 1 datagrams
+2022-11-17T21:38:34.794405Z TRACE quinn_proto::connection::streams: wrote 8 bytes stream=client bidirectional stream 0
+2022-11-17T21:38:34.794479Z TRACE quinn_proto::connection::streams: wrote 21 bytes stream=client bidirectional stream 0
+2022-11-17T21:38:34.794513Z TRACE quinn_proto::connection::streams: wrote 132 bytes stream=client bidirectional stream 0
+2022-11-17T21:38:34.794614Z TRACE drive{id=0}:send{space=Data pn=2}: quinn_proto::connection::streams::state: STREAM id=client bidirectional stream 0 off=0 len=161 fin=true
+2022-11-17T21:38:34.794682Z TRACE drive{id=0}: quinn_proto::connection: sending 191 bytes in 1 datagrams
+2022-11-17T21:38:34.797353Z TRACE drive{id=0}: quinn_proto::connection: got Data packet (122 bytes) from 127.0.0.1:8081 using id c572a030c30af7f6
+2022-11-17T21:38:34.797441Z TRACE drive{id=0}:recv{space=Data pn=1}: quinn_proto::connection: got frame HandshakeDone
+2022-11-17T21:38:34.797471Z TRACE drive{id=0}:recv{space=Data pn=1}:frame{ty=HANDSHAKE_DONE}: quinn_proto::connection: discarding Handshake keys
+2022-11-17T21:38:34.797553Z TRACE drive{id=0}:recv{space=Data pn=1}: quinn_proto::connection: got frame Ack(Ack { largest: 2, delay: 0, ecn: Some(EcnCounts { ect0: 3, ect1: 0, ce: 0 }), ranges: "[0..=2]" })
+2022-11-17T21:38:34.797668Z TRACE drive{id=0}:recv{space=Data pn=1}: quinn_proto::connection: got crypto frame offset=0 len=81
+2022-11-17T21:38:34.797708Z TRACE drive{id=0}:recv{space=Data pn=1}:frame{ty=CRYPTO}: quinn_proto::connection: consumed 81 CRYPTO bytes
+2022-11-17T21:38:34.797848Z TRACE drive{id=0}:recv{space=Data pn=1}: quinn_proto::connection: got frame RetireConnectionId { sequence: 0 }
+2022-11-17T21:38:34.797931Z TRACE drive{id=0}:send{space=Data pn=3}: quinn_proto::connection: ACK ArrayRangeSet([1..2]), Delay = 0us
+2022-11-17T21:38:34.797991Z TRACE drive{id=0}: quinn_proto::connection: sending 34 bytes in 1 datagrams
+2022-11-17T21:38:34.798058Z TRACE quinn_proto::endpoint: peer retired CID 0: e130af5144bd0256
+2022-11-17T21:38:34.798220Z TRACE drive{id=0}:send{space=Data pn=4}: quinn_proto::connection: NEW_CONNECTION_ID sequence=5 id=07801e914f706e4c
+2022-11-17T21:38:34.798284Z TRACE drive{id=0}: quinn_proto::connection: sending 54 bytes in 1 datagrams
+2022-11-17T21:38:34.798382Z TRACE drive{id=0}: quinn_proto::connection: got Data packet (187 bytes) from 127.0.0.1:8081 using id c572a030c30af7f6
+2022-11-17T21:38:34.798455Z TRACE drive{id=0}:recv{space=Data pn=2}: quinn_proto::connection: got frame MaxStreams { dir: Bi, count: 100 }
+2022-11-17T21:38:34.798515Z TRACE drive{id=0}:recv{space=Data pn=2}: quinn_proto::connection: got stream frame id=client bidirectional stream 0 offset=0 len=154 fin=true
+2022-11-17T21:38:34.798608Z TRACE drive{id=0}:send{space=Data pn=5}: quinn_proto::connection: ACK ArrayRangeSet([1..3]), Delay = 0us
+2022-11-17T21:38:34.798666Z TRACE drive{id=0}: quinn_proto::connection: sending 34 bytes in 1 datagrams
+2022-11-17T21:38:34.798774Z  INFO stateless_reset: success
+2022-11-17T21:38:34.798897Z TRACE drive{id=0}: quinn_proto::connection: got Data packet (34 bytes) from 127.0.0.1:8081 using id c572a030c30af7f6
+2022-11-17T21:38:34.798963Z TRACE drive{id=0}:recv{space=Data pn=3}: quinn_proto::connection: got frame Ack(Ack { largest: 4, delay: 0, ecn: Some(EcnCounts { ect0: 5, ect1: 0, ce: 0 }), ranges: "[3..=4]" })
+2022-11-17T21:38:34.799247Z TRACE drive{id=0}: quinn_proto::connection: got Data packet (29 bytes) from 127.0.0.1:8081 using id c572a030c30af7f6
+2022-11-17T21:38:34.799311Z TRACE drive{id=0}:recv{space=Data pn=4}: quinn_proto::connection: got frame MaxStreams { dir: Bi, count: 101 }
+2022-11-17T21:38:34.799382Z TRACE drive{id=0}:send{space=Data pn=6}: quinn_proto::connection: ACK ArrayRangeSet([2..5]), Delay = 0us
+2022-11-17T21:38:34.799435Z TRACE drive{id=0}: quinn_proto::connection: sending 34 bytes in 1 datagrams
+2022-11-17T21:38:34.980303Z TRACE drive{id=0}: quinn_proto::connection: got Data packet (191 bytes) from 127.0.0.1:8081 using id c572a030c30af7f6
+2022-11-17T21:38:34.980454Z TRACE drive{id=0}:recv{space=Data pn=5}: quinn_proto::connection: got stream frame id=server bidirectional stream 0 offset=0 len=161 fin=true
+2022-11-17T21:38:34.980633Z TRACE drive{id=0}:send{space=Data pn=7}: quinn_proto::connection: ACK ArrayRangeSet([2..6]), Delay = 0us
+2022-11-17T21:38:34.980721Z TRACE drive{id=0}: quinn_proto::connection: sending 34 bytes in 1 datagrams
+2022-11-17T21:38:34.981226Z TRACE quinn_proto::connection::streams: wrote 8 bytes stream=server bidirectional stream 0
+2022-11-17T21:38:34.981276Z TRACE quinn_proto::connection::streams: wrote 14 bytes stream=server bidirectional stream 0
+2022-11-17T21:38:34.981300Z TRACE quinn_proto::connection::streams: wrote 132 bytes stream=server bidirectional stream 0
+2022-11-17T21:38:34.981388Z TRACE drive{id=0}:send{space=Data pn=8}: quinn_proto::connection::streams::state: MAX_STREAMS (bidirectional) value=100
+2022-11-17T21:38:34.981426Z TRACE drive{id=0}:send{space=Data pn=8}: quinn_proto::connection::streams::state: STREAM id=server bidirectional stream 0 off=0 len=154 fin=true
+2022-11-17T21:38:34.981498Z TRACE drive{id=0}: quinn_proto::connection: sending 187 bytes in 1 datagrams
+2022-11-17T21:38:34.982235Z TRACE drive{id=0}: quinn_proto::connection: got Data packet (34 bytes) from 127.0.0.1:8081 using id c572a030c30af7f6
+2022-11-17T21:38:34.982312Z TRACE drive{id=0}:recv{space=Data pn=6}: quinn_proto::connection: got frame Ack(Ack { largest: 8, delay: 0, ecn: Some(EcnCounts { ect0: 9, ect1: 0, ce: 0 }), ranges: "[5..=8]" })
+2022-11-17T21:38:34.982497Z TRACE drive{id=0}:send{space=Data pn=9}: quinn_proto::connection::streams::state: MAX_STREAMS (bidirectional) value=101
+2022-11-17T21:38:34.982554Z TRACE drive{id=0}: quinn_proto::connection: sending 29 bytes in 1 datagrams
+2022-11-17T21:38:34.983222Z TRACE drive{id=0}: quinn_proto::connection: got Data packet (34 bytes) from 127.0.0.1:8081 using id c572a030c30af7f6
+2022-11-17T21:38:34.983313Z TRACE drive{id=0}:recv{space=Data pn=7}: quinn_proto::connection: got frame Ack(Ack { largest: 9, delay: 0, ecn: Some(EcnCounts { ect0: 10, ect1: 0, ce: 0 }), ranges: "[5..=9]" })
+2022-11-17T21:38:35.777442Z TRACE quinn_proto::connection::streams: wrote 8 bytes stream=client bidirectional stream 1
+2022-11-17T21:38:35.777800Z TRACE quinn_proto::connection::streams: wrote 21 bytes stream=client bidirectional stream 1
+2022-11-17T21:38:35.777885Z TRACE quinn_proto::connection::streams: wrote 132 bytes stream=client bidirectional stream 1
+2022-11-17T21:38:35.778535Z TRACE drive{id=0}:send{space=Data pn=10}: quinn_proto::connection::streams::state: STREAM id=client bidirectional stream 1 off=0 len=161 fin=true
+2022-11-17T21:38:35.778930Z TRACE drive{id=0}: quinn_proto::connection: sending 191 bytes in 1 datagrams
+2022-11-17T21:38:35.781808Z TRACE drive{id=0}: quinn_proto::connection: got Data packet (34 bytes) from 127.0.0.1:8081 using id c572a030c30af7f6
+2022-11-17T21:38:35.781953Z TRACE drive{id=0}:recv{space=Data pn=8}: quinn_proto::connection: got frame Ack(Ack { largest: 10, delay: 0, ecn: Some(EcnCounts { ect0: 11, ect1: 0, ce: 0 }), ranges: "[5..=10]" })
+2022-11-17T21:38:35.782433Z TRACE drive{id=0}: quinn_proto::connection: got Data packet (187 bytes) from 127.0.0.1:8081 using id c572a030c30af7f6
+2022-11-17T21:38:35.782512Z TRACE drive{id=0}:recv{space=Data pn=9}: quinn_proto::connection: got frame MaxStreams { dir: Bi, count: 101 }
+2022-11-17T21:38:35.782574Z TRACE drive{id=0}:recv{space=Data pn=9}: quinn_proto::connection: got stream frame id=client bidirectional stream 1 offset=0 len=154 fin=true
+2022-11-17T21:38:35.782682Z TRACE drive{id=0}:send{space=Data pn=11}: quinn_proto::connection: ACK ArrayRangeSet([6..10]), Delay = 0us
+2022-11-17T21:38:35.782749Z TRACE drive{id=0}: quinn_proto::connection: sending 34 bytes in 1 datagrams
+2022-11-17T21:38:35.782907Z  INFO stateless_reset: success
+2022-11-17T21:38:35.783563Z TRACE drive{id=0}: quinn_proto::connection: got Data packet (29 bytes) from 127.0.0.1:8081 using id c572a030c30af7f6
+2022-11-17T21:38:35.783641Z TRACE drive{id=0}:recv{space=Data pn=10}: quinn_proto::connection: got frame MaxStreams { dir: Bi, count: 102 }
+2022-11-17T21:38:35.783740Z TRACE drive{id=0}:send{space=Data pn=12}: quinn_proto::connection: ACK ArrayRangeSet([6..11]), Delay = 0us
+2022-11-17T21:38:35.783798Z TRACE drive{id=0}: quinn_proto::connection: sending 34 bytes in 1 datagrams
+2022-11-17T21:38:36.777312Z TRACE quinn_proto::connection::streams: wrote 8 bytes stream=client bidirectional stream 2
+2022-11-17T21:38:36.777689Z TRACE quinn_proto::connection::streams: wrote 21 bytes stream=client bidirectional stream 2
+2022-11-17T21:38:36.777817Z TRACE quinn_proto::connection::streams: wrote 132 bytes stream=client bidirectional stream 2
+2022-11-17T21:38:36.778617Z TRACE drive{id=0}:send{space=Data pn=13}: quinn_proto::connection::streams::state: STREAM id=client bidirectional stream 2 off=0 len=161 fin=true
+2022-11-17T21:38:36.779143Z TRACE drive{id=0}: quinn_proto::connection: sending 191 bytes in 1 datagrams
+2022-11-17T21:38:36.823478Z TRACE drive{id=0}: quinn_proto::connection: timeout timer=LossDetection
+2022-11-17T21:38:36.823564Z TRACE drive{id=0}: quinn_proto::connection: PTO fired in_flight=191 count=0 space=Data
+2022-11-17T21:38:36.823772Z TRACE drive{id=0}:send{space=Data pn=14}: quinn_proto::connection: PING
+2022-11-17T21:38:36.823818Z TRACE drive{id=0}:send{space=Data pn=14}: quinn_proto::connection::packet_builder: PADDING * 2
+2022-11-17T21:38:36.823934Z TRACE drive{id=0}: quinn_proto::connection: sending 29 bytes in 1 datagrams
+2022-11-17T21:38:36.823992Z TRACE drive{id=0}:send{space=Data pn=15}: quinn_proto::connection: PING
+2022-11-17T21:38:36.824021Z TRACE drive{id=0}:send{space=Data pn=15}: quinn_proto::connection::packet_builder: PADDING * 2
+2022-11-17T21:38:36.824065Z TRACE drive{id=0}: quinn_proto::connection: sending 29 bytes in 1 datagrams
+2022-11-17T21:38:36.911670Z TRACE drive{id=0}: quinn_proto::connection: timeout timer=LossDetection
+2022-11-17T21:38:36.911717Z TRACE drive{id=0}: quinn_proto::connection: PTO fired in_flight=249 count=1 space=Data
+2022-11-17T21:38:36.911849Z TRACE drive{id=0}:send{space=Data pn=16}: quinn_proto::connection: PING
+2022-11-17T21:38:36.911884Z TRACE drive{id=0}:send{space=Data pn=16}: quinn_proto::connection::packet_builder: PADDING * 2
+2022-11-17T21:38:36.911953Z TRACE drive{id=0}: quinn_proto::connection: sending 29 bytes in 1 datagrams
+2022-11-17T21:38:36.912004Z TRACE drive{id=0}:send{space=Data pn=17}: quinn_proto::connection: PING
+2022-11-17T21:38:36.912030Z TRACE drive{id=0}:send{space=Data pn=17}: quinn_proto::connection::packet_builder: PADDING * 2
+2022-11-17T21:38:36.912070Z TRACE drive{id=0}: quinn_proto::connection: sending 29 bytes in 1 datagrams

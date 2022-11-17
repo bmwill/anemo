@@ -2,6 +2,7 @@ use anemo::{Request, Response};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use std::{convert::Infallible, time::Duration};
 use tower::{util::BoxCloneService, ServiceExt};
+use tracing::info;
 
 const KEY_1: [u8; 32] = [
     62, 178, 86, 143, 75, 93, 10, 229, 54, 166, 100, 220, 136, 72, 190, 52, 129, 161, 234, 239, 33,
@@ -13,8 +14,8 @@ const KEY_2: [u8; 32] = [
     38, 191, 155, 21, 43, 80, 244, 167, 96, 221, 229, 13,
 ];
 
-const ADDRESS_1: &str = "localhost:8080";
-const ADDRESS_2: &str = "localhost:8081";
+const ADDRESS_1: &str = "127.0.0.1:8080";
+const ADDRESS_2: &str = "127.0.0.1:8081";
 
 #[tokio::main]
 async fn main() {
@@ -31,9 +32,10 @@ async fn main() {
         .server_name("test")
         .start(echo_service())
         .unwrap();
-    println!("address: {:?}", network.local_addr());
+    info!("address: {:?}", network.local_addr());
 
     let mut interval = tokio::time::interval(Duration::from_secs(1));
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     loop {
         interval.tick().await;
 
@@ -45,7 +47,7 @@ async fn main() {
             match network.connect(their_address).await {
                 Ok(peer_id) => peer_id,
                 Err(e) => {
-                    println!("{e}");
+                    info!("{e}");
                     continue;
                 }
             }
@@ -53,10 +55,10 @@ async fn main() {
             peers.pop().unwrap()
         };
 
-        let msg = Bytes::from_static(b"Warbreaker");
+        let msg = Bytes::from_static(&[42; 128]);
         match network.rpc(peer_id, Request::new(msg)).await {
-            Ok(_) => println!("success"),
-            Err(e) => println!("{e}"),
+            Ok(_) => info!("success"),
+            Err(e) => info!("{e}"),
         }
     }
 }
