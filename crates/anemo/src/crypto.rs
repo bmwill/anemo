@@ -200,3 +200,18 @@ pub(crate) fn peer_id_from_certificate(
 
     Ok(peer_id)
 }
+
+/// Perform a HKDF with the provided ed25519 private key in order to generate a consistent reset
+/// key used for quic stateless connection resets.
+pub(crate) fn construct_reset_key(private_key: &[u8; 32]) -> ring::hmac::Key {
+    const STATELESS_RESET_SALT: &[u8] = b"anemo-stateless-reset";
+
+    let salt = ring::hkdf::Salt::new(ring::hkdf::HKDF_SHA256, STATELESS_RESET_SALT);
+    let prk = salt.extract(private_key);
+    let okm = prk.expand(&[], ring::hmac::HMAC_SHA256).unwrap();
+
+    let mut reset_key = [0; 32];
+    okm.fill(&mut reset_key).unwrap();
+
+    ring::hmac::Key::new(ring::hmac::HMAC_SHA256, &reset_key)
+}

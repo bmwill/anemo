@@ -278,13 +278,9 @@ impl EndpointConfigBuilder {
             public_key: None,
         };
 
-        // Derive our quic reset key from our private key
-        let reset_key = {
-            let mut rng = <rand::rngs::StdRng as rand::SeedableRng>::from_seed(keypair.secret_key);
-            let mut reset_key = [0; 64];
-            rand::RngCore::fill_bytes(&mut rng, &mut reset_key);
-            reset_key
-        };
+        // Derive our quic reset key from our private key using an HKDF
+        let reset_key = crate::crypto::construct_reset_key(&keypair.secret_key);
+        let quinn_endpoint_config = quinn::EndpointConfig::new(Arc::new(reset_key));
 
         let server_name = self.server_name.unwrap();
         let transport_config = Arc::new(self.transport_config.unwrap_or_default());
@@ -315,7 +311,7 @@ impl EndpointConfigBuilder {
             quinn_client_config: client_config,
             server_name,
             transport_config,
-            reset_key,
+            quinn_endpoint_config,
         })
     }
 
@@ -377,7 +373,7 @@ pub(crate) struct EndpointConfig {
     server_name: String,
 
     transport_config: Arc<quinn::TransportConfig>,
-    reset_key: [u8; 64],
+    quinn_endpoint_config: quinn::EndpointConfig,
 }
 
 impl EndpointConfig {
@@ -394,10 +390,7 @@ impl EndpointConfig {
     }
 
     pub fn quinn_endpoint_config(&self) -> quinn::EndpointConfig {
-        quinn::EndpointConfig::new(Arc::new(ring::hmac::Key::new(
-            ring::hmac::HMAC_SHA256,
-            &self.reset_key,
-        )))
+        self.quinn_endpoint_config.clone()
     }
 
     pub fn server_config(&self) -> &quinn::ServerConfig {
