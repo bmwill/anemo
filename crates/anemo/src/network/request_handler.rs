@@ -141,7 +141,7 @@ impl BiStreamRequestHandler {
         // We also watch the send_stream and see if it has been prematurely terminated by the
         // remote side indicating that this RPC was canceled.
         let response = {
-            let handler = self.service.oneshot(request);
+            let handler = self.service.clone().oneshot(request);
             let stopped = self.send_stream.get_mut().stopped();
             tokio::select! {
                 response = handler => response.expect("Infallible"),
@@ -157,5 +157,11 @@ impl BiStreamRequestHandler {
         self.send_stream.get_mut().finish().await?;
 
         Ok(())
+    }
+}
+
+impl Drop for BiStreamRequestHandler {
+    fn drop(&mut self) {
+        let _ = self.send_stream.get_mut().reset(0u8.into());
     }
 }
