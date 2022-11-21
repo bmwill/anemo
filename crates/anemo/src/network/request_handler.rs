@@ -2,9 +2,12 @@ use super::{
     wire::{network_message_frame_codec, read_request, write_response},
     ActivePeers,
 };
-use crate::{connection::Connection, Request, Response, Result};
+use crate::{
+    connection::{Connection, SendStream},
+    Request, Response, Result,
+};
 use bytes::Bytes;
-use quinn::{RecvStream, SendStream};
+use quinn::RecvStream;
 use std::convert::Infallible;
 use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
 use tower::{util::BoxCloneService, ServiceExt};

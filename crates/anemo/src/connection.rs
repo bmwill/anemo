@@ -1,6 +1,12 @@
 use crate::{ConnectionOrigin, PeerId, Result};
-use quinn::{ConnectionError, RecvStream, SendStream};
-use std::{fmt, net::SocketAddr, time::Duration};
+use quinn::{ConnectionError, RecvStream};
+use std::{
+    fmt, io,
+    net::SocketAddr,
+    pin::Pin,
+    task::{Context, Poll},
+    time::Duration,
+};
 use tracing::trace;
 
 #[derive(Clone)]
@@ -86,7 +92,7 @@ impl Connection {
     // want to look at explicitly calling Reset on the stream if it is dropped pre-maturely.
     #[allow(dead_code)]
     pub async fn open_uni(&self) -> Result<SendStream, ConnectionError> {
-        self.inner.open_uni().await
+        self.inner.open_uni().await.map(SendStream)
     }
 
     /// Open a bidirectional stream to the peer.
@@ -96,7 +102,10 @@ impl Connection {
     ///
     /// Messages sent over the stream will arrive at the peer in the order they were sent.
     pub async fn open_bi(&self) -> Result<(SendStream, RecvStream), ConnectionError> {
-        self.inner.open_bi().await
+        self.inner
+            .open_bi()
+            .await
+            .map(|(send, recv)| (SendStream(send), recv))
     }
 
     /// Close the connection immediately.
@@ -115,7 +124,10 @@ impl Connection {
 
     /// Accept the next incoming bidirectional stream
     pub async fn accept_bi(&self) -> Result<(SendStream, RecvStream), ConnectionError> {
-        self.inner.accept_bi().await
+        self.inner
+            .accept_bi()
+            .await
+            .map(|(send, recv)| (SendStream(send), recv))
     }
 
     /// Receive an application datagram
@@ -132,5 +144,49 @@ impl fmt::Debug for Connection {
             .field("remote_address", &self.remote_address())
             .field("peer_id", &self.peer_id())
             .finish_non_exhaustive()
+    }
+}
+
+/// A wrapper around a [quinn::SendStream] that enforces that the stream is shut down immediately
+/// when dropped. The proper way to ensure that all data has been successfully transmitted and
+/// Ack'd by the remote side is to call [quinn::SendStream::finish] prior to dropping the stream.
+pub(crate) struct SendStream(quinn::SendStream);
+
+impl Drop for SendStream {
+    fn drop(&mut self) {
+        // We don't care if the stream has already been closed
+        let _ = self.0.reset(0u8.into());
+    }
+}
+
+impl std::ops::Deref for SendStream {
+    type Target = quinn::SendStream;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for SendStream {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl tokio::io::AsyncWrite for SendStream {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        Pin::new(&mut self.0).poll_write(cx, buf)
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.0).poll_flush(cx)
+    }
+
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.0).poll_shutdown(cx)
     }
 }
