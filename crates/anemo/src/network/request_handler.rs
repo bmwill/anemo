@@ -13,6 +13,10 @@ use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
 use tower::{util::BoxCloneService, ServiceExt};
 use tracing::{debug, trace};
 
+/// Manages incoming requests from a peer.
+///
+/// Currently only bi-directional streams are supported. Whenever a new request (stream) is
+/// received a new task is spawn to handle it.
 pub(crate) struct InboundRequestHandler {
     connection: Connection,
 
@@ -93,6 +97,8 @@ impl InboundRequestHandler {
     }
 }
 
+/// Handles a single incoming request from a peer. It receives the request, forwards it
+/// to the service for processing and the sends back to peer the response.
 struct BiStreamRequestHandler {
     connection: Connection,
     service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,

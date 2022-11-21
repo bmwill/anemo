@@ -32,13 +32,22 @@ struct ConnectingOutput {
     target_peer_id: Option<PeerId>,
 }
 
+/// The active service responsible establishing new inboud and outbound connections.
 pub(crate) struct ConnectionManager {
     config: Arc<Config>,
 
     endpoint: Arc<Endpoint>,
 
+    /// Channel to receive external requests/commands for the connection manager to perform.
+    ///
+    /// The ConnectionManager will gracefull shutdown once this channel is closed.
     mailbox: mpsc::Receiver<ConnectionManagerRequest>,
+
+    /// Set of pending inbound and outbound connections.
     pending_connections: JoinSet<ConnectingOutput>,
+
+    /// A map of all the inflight attempts to establish outbound connections started internally due
+    /// to a peer being configured as a KnownPeer.
     pending_dials: HashMap<PeerId, oneshot::Receiver<Result<PeerId>>>,
     dial_backoff_states: HashMap<PeerId, DialBackoffState>,
 
@@ -62,12 +71,12 @@ impl ConnectionManager {
         known_peers: KnownPeers,
         service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
     ) -> (Self, mpsc::Sender<ConnectionManagerRequest>) {
-        let (sender, reciever) = mpsc::channel(config.connection_manager_channel_capacity());
+        let (sender, receiver) = mpsc::channel(config.connection_manager_channel_capacity());
         (
             Self {
                 config,
                 endpoint,
-                mailbox: reciever,
+                mailbox: receiver,
                 pending_connections: JoinSet::new(),
                 pending_dials: HashMap::default(),
                 dial_backoff_states: HashMap::default(),
@@ -137,6 +146,8 @@ impl ConnectionManager {
         info!("ConnectionManager ended");
     }
 
+    /// This method adds an established connection with a peer to the map of active peers.
+    /// It is also starting a new task to handle the incoming messages for this connection.
     fn add_peer(&mut self, new_connection: Connection) {
         if let Some(new_connection) = self
             .active_peers
@@ -165,7 +176,7 @@ impl ConnectionManager {
     }
 
     fn handle_incoming(&mut self, connecting: Connecting) {
-        trace!("recieved new incoming connection");
+        trace!("received new incoming connection");
         let connecting = connecting.map(|connecting_result| ConnectingOutput {
             connecting_result,
             maybe_oneshot: None,
@@ -279,7 +290,7 @@ impl ConnectionManager {
         );
 
         for mut peer in eligible.into_iter().take(number_to_dial) {
-            let (sender, reciever) = oneshot::channel();
+            let (sender, receiver) = oneshot::channel();
 
             // Select the index of the address to dial by mapping the number of attempts we've made
             // so far into the Peer's known addresses
@@ -292,10 +303,11 @@ impl ConnectionManager {
 
             let address = peer.address.remove(idx);
             self.dial_peer(address, Some(peer.peer_id), sender);
-            self.pending_dials.insert(peer.peer_id, reciever);
+            self.pending_dials.insert(peer.peer_id, receiver);
         }
     }
 
+    #[instrument(level = "trace", skip_all, fields(peer_id = ?peer_id, address = ?address))]
     fn dial_peer(
         &mut self,
         address: Address,
@@ -367,6 +379,8 @@ impl DialBackoffState {
     }
 }
 
+/// Handle that keeps all the peers for which we have an established
+/// connection.
 #[derive(Debug, Clone)]
 pub(crate) struct ActivePeers(Arc<RwLock<ActivePeersInner>>);
 
@@ -424,7 +438,7 @@ struct ActivePeersInner {
 
 impl ActivePeersInner {
     fn new(channel_size: usize) -> Self {
-        let (sender, _reciever) = broadcast::channel(channel_size);
+        let (sender, _receiver) = broadcast::channel(channel_size);
         Self {
             connections: Default::default(),
             peer_event_sender: sender,
@@ -543,6 +557,7 @@ impl ActivePeersInner {
     }
 }
 
+/// A handle that keeps all the peers which we have registered and are known to us.
 #[derive(Clone, Debug, Default)]
 pub struct KnownPeers(Arc<RwLock<HashMap<PeerId, PeerInfo>>>);
 

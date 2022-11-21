@@ -10,6 +10,10 @@ use std::{
 };
 use tracing::trace;
 
+/// A QUIC endpoint.
+///
+/// An endpoint corresponds to a single UDP socket, may host many connections, and may act as both
+/// client and server for different connections.
 #[derive(Debug)]
 pub(crate) struct Endpoint {
     inner: quinn::Endpoint,
