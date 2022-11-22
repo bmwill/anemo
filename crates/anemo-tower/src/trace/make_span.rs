@@ -83,6 +83,10 @@ impl MakeSpan for DefaultMakeSpan {
         let peer_id = request
             .peer_id()
             .map(|peer_id| tracing::field::display(peer_id.short_display(4)));
+        let direction = request
+            .extensions()
+            .get::<anemo::Direction>()
+            .map(tracing::field::display);
 
         // This macro is needed, unfortunately, because `tracing::span!` requires the level
         // argument to be static. Meaning we can't just pass `self.level`.
@@ -93,6 +97,7 @@ impl MakeSpan for DefaultMakeSpan {
                     "request",
                     route = %request.route(),
                     remote_peer_id = peer_id,
+                    direction = direction,
                     headers = headers,
                 )
             }
