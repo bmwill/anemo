@@ -156,11 +156,13 @@ impl BiStreamRequestHandler {
         // * PeerId
         // * ConnectionOrigin
         // * Remote SocketAddr
+        // * Direction of the Request
         request.extensions_mut().insert(self.connection.peer_id());
         request.extensions_mut().insert(self.connection.origin());
         request
             .extensions_mut()
             .insert(self.connection.remote_address());
+        request.extensions_mut().insert(crate::Direction::Inbound);
 
         // Issue request to configured Service
         // We also watch the send_stream and see if it has been prematurely terminated by the

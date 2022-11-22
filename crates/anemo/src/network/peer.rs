@@ -73,7 +73,13 @@ impl Service<Request<Bytes>> for Peer {
     }
 
     #[inline]
-    fn call(&mut self, request: Request<Bytes>) -> Self::Future {
+    fn call(&mut self, mut request: Request<Bytes>) -> Self::Future {
+        // Provide Connection Metadata to middleware layers via extentions including:
+        // * PeerId
+        // * Direction of the Request
+        request.extensions_mut().insert(self.peer_id());
+        request.extensions_mut().insert(crate::Direction::Outbound);
+
         let peer = self.clone();
         let inner = tower::service_fn(move |request| {
             let peer = peer.clone();
