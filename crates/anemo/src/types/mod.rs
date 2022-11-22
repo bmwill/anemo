@@ -4,7 +4,7 @@ pub mod request;
 pub mod response;
 
 pub use address::Address;
-pub use peer_id::{ConnectionOrigin, PeerId};
+pub use peer_id::{ConnectionOrigin, Direction, PeerId};
 
 pub use http::Extensions;
 

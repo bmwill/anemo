@@ -36,32 +36,56 @@ impl<'a> std::fmt::Display for ShortPeerId<'a> {
     }
 }
 
-/// Origin of how a Connection was established.
+/// Direction of a network event.
 #[derive(Clone, Copy, Hash, PartialEq, Eq)]
-pub enum ConnectionOrigin {
-    /// `Inbound` indicates that we are the listener for this connection.
+pub enum Direction {
+    /// `Inbound` indicates that the remote side initiated the network event.
     Inbound,
-    /// `Outbound` indicates that we are the dialer for this connection.
+    /// `Outbound` indicates that we initiated the network event.
     Outbound,
 }
 
-impl ConnectionOrigin {
+impl Direction {
     pub fn as_str(self) -> &'static str {
         match self {
-            ConnectionOrigin::Inbound => "inbound",
-            ConnectionOrigin::Outbound => "outbound",
+            Direction::Inbound => "inbound",
+            Direction::Outbound => "outbound",
         }
     }
 }
 
-impl std::fmt::Debug for ConnectionOrigin {
+impl std::fmt::Debug for Direction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("ConnectionOrigin::")?;
+        f.write_str("Direction::")?;
         let direction = match self {
-            ConnectionOrigin::Inbound => "Inbound",
-            ConnectionOrigin::Outbound => "Outbound",
+            Direction::Inbound => "Inbound",
+            Direction::Outbound => "Outbound",
         };
         f.write_str(direction)
+    }
+}
+
+impl std::fmt::Display for Direction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// Origin of how a Connection was established.
+///
+/// `Inbound` indicates that we are the listener for this connection.
+/// `Outbound` indicates that we are the dialer for this connection.
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
+pub struct ConnectionOrigin(Direction);
+
+impl ConnectionOrigin {
+    #[allow(non_upper_case_globals)]
+    pub const Inbound: ConnectionOrigin = ConnectionOrigin(Direction::Inbound);
+    #[allow(non_upper_case_globals)]
+    pub const Outbound: ConnectionOrigin = ConnectionOrigin(Direction::Outbound);
+
+    pub fn as_str(self) -> &'static str {
+        self.0.as_str()
     }
 }
 
@@ -73,15 +97,33 @@ impl std::fmt::Display for ConnectionOrigin {
 
 #[cfg(test)]
 mod test {
-    use super::{ConnectionOrigin, PeerId};
+    use super::{ConnectionOrigin, Direction, PeerId};
+
+    #[test]
+    fn direction_debug() {
+        let inbound = format!("{:?}", Direction::Inbound);
+        let outbound = format!("{:?}", Direction::Outbound);
+
+        assert_eq!(inbound, "Direction::Inbound");
+        assert_eq!(outbound, "Direction::Outbound");
+    }
+
+    #[test]
+    fn direction_display() {
+        let inbound = Direction::Inbound.to_string();
+        let outbound = Direction::Outbound.to_string();
+
+        assert_eq!(inbound, "inbound");
+        assert_eq!(outbound, "outbound");
+    }
 
     #[test]
     fn connection_origin_debug() {
         let inbound = format!("{:?}", ConnectionOrigin::Inbound);
         let outbound = format!("{:?}", ConnectionOrigin::Outbound);
 
-        assert_eq!(inbound, "ConnectionOrigin::Inbound");
-        assert_eq!(outbound, "ConnectionOrigin::Outbound");
+        assert_eq!(inbound, "ConnectionOrigin(Direction::Inbound)");
+        assert_eq!(outbound, "ConnectionOrigin(Direction::Outbound)");
     }
 
     #[test]
