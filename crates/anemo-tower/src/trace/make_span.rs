@@ -77,12 +77,12 @@ impl Default for DefaultMakeSpan {
 
 impl MakeSpan for DefaultMakeSpan {
     fn make_span(&mut self, request: &Request<Bytes>) -> Span {
-        let headers = tracing::field::debug(request.headers());
-        let headers: &dyn tracing::field::Value = if self.include_headers {
-            &headers
-        } else {
-            &tracing::field::Empty
-        };
+        let headers = self
+            .include_headers
+            .then(|| tracing::field::debug(request.headers()));
+        let peer_id = request
+            .peer_id()
+            .map(|peer_id| tracing::field::display(peer_id.short_display(4)));
 
         // This macro is needed, unfortunately, because `tracing::span!` requires the level
         // argument to be static. Meaning we can't just pass `self.level`.
@@ -92,7 +92,7 @@ impl MakeSpan for DefaultMakeSpan {
                     $level,
                     "request",
                     route = %request.route(),
-                    version = ?request.version(),
+                    remote_peer_id = peer_id,
                     headers = headers,
                 )
             }

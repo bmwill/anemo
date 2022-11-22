@@ -102,12 +102,9 @@ impl DefaultOnResponse {
 
 impl OnResponse for DefaultOnResponse {
     fn on_response(self, response: &Response<Bytes>, latency: Duration, _: &Span) {
-        let headers = tracing::field::debug(response.headers());
-        let headers: &dyn tracing::field::Value = if self.include_headers {
-            &headers
-        } else {
-            &tracing::field::Empty
-        };
+        let headers = self
+            .include_headers
+            .then(|| tracing::field::debug(response.headers()));
 
         // This macro is needed, unfortunately, because `tracing::event!` requires the level
         // argument to be static. Meaning we can't just pass `self.level`.
