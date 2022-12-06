@@ -6,8 +6,10 @@ use std::{
     future::Future,
     net::SocketAddr,
     pin::Pin,
+    sync::RwLock,
     task::{Context, Poll},
 };
+use tap::Pipe;
 use tracing::trace;
 
 /// A QUIC endpoint.
@@ -17,13 +19,13 @@ use tracing::trace;
 #[derive(Debug)]
 pub(crate) struct Endpoint {
     inner: quinn::Endpoint,
-    local_addr: SocketAddr,
+    local_addr: RwLock<SocketAddr>,
     config: EndpointConfig,
 }
 
 impl Endpoint {
     pub fn new(config: EndpointConfig, socket: std::net::UdpSocket) -> Result<Self> {
-        let local_addr = socket.local_addr()?;
+        let local_addr = socket.local_addr()?.pipe(RwLock::new);
         let server_config = config.server_config().clone();
         let endpoint = quinn::Endpoint::new(
             config.quinn_endpoint_config(),
@@ -77,7 +79,7 @@ impl Endpoint {
 
     /// Returns the socket address that this Endpoint is bound to.
     pub fn local_addr(&self) -> SocketAddr {
-        self.local_addr
+        *self.local_addr.read().unwrap()
     }
 
     pub fn peer_id(&self) -> PeerId {
@@ -115,7 +117,11 @@ impl Endpoint {
     ///
     /// On error, the old UDP socket is retained.
     pub fn rebind(&self, socket: std::net::UdpSocket) -> std::io::Result<()> {
-        self.inner.rebind(socket)
+        let local_addr = socket.local_addr()?;
+        self.inner.rebind(socket)?;
+        *self.local_addr.write().unwrap() = local_addr;
+
+        Ok(())
     }
 
     /// Get the next incoming connection attempt from a client
