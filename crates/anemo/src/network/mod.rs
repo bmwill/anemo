@@ -16,7 +16,9 @@ use tower::{
 
 mod connection_manager;
 pub use connection_manager::KnownPeers;
-use connection_manager::{ActivePeers, ConnectionManager, ConnectionManagerRequest};
+use connection_manager::{
+    ActivePeers, ActivePeersRef, ConnectionManager, ConnectionManagerRequest,
+};
 
 mod peer;
 pub use peer::Peer;
@@ -128,6 +130,7 @@ impl Builder {
 
         let endpoint = Arc::new(endpoint);
         let active_peers = ActivePeers::new(config.peer_event_broadcast_channel_capacity());
+        let active_peers_ref = active_peers.downgrade();
         let known_peers = KnownPeers::new();
 
         // Build the Outbound Request Layer
@@ -158,7 +161,7 @@ impl Builder {
             let (connection_manager, connection_manager_handle) = ConnectionManager::new(
                 config.clone(),
                 endpoint.clone(),
-                active_peers.clone(),
+                active_peers,
                 known_peers.clone(),
                 service,
             );
@@ -168,7 +171,7 @@ impl Builder {
             NetworkInner {
                 _config: config,
                 endpoint,
-                active_peers,
+                active_peers: active_peers_ref,
                 known_peers,
                 connection_manager_handle,
                 outbound_request_layer,
@@ -202,8 +205,13 @@ impl Network {
         self.0.peers()
     }
 
-    pub fn subscribe(&self) -> (broadcast::Receiver<PeerEvent>, Vec<PeerId>) {
-        self.0.active_peers.subscribe()
+    pub fn subscribe(&self) -> Result<(broadcast::Receiver<PeerEvent>, Vec<PeerId>)> {
+        self.0
+            .active_peers
+            .upgrade()
+            .as_ref()
+            .map(ActivePeers::subscribe)
+            .ok_or_else(|| anyhow!("network has been shutdown"))
     }
 
     pub fn peer(&self, peer_id: PeerId) -> Option<Peer> {
@@ -252,7 +260,7 @@ impl Network {
 struct NetworkInner {
     _config: Arc<Config>,
     endpoint: Arc<Endpoint>,
-    active_peers: ActivePeers,
+    active_peers: ActivePeersRef,
     known_peers: KnownPeers,
     connection_manager_handle: mpsc::Sender<ConnectionManagerRequest>,
 
@@ -261,7 +269,11 @@ struct NetworkInner {
 
 impl NetworkInner {
     fn peers(&self) -> Vec<PeerId> {
-        self.active_peers.peers()
+        self.active_peers
+            .upgrade()
+            .as_ref()
+            .map(ActivePeers::peers)
+            .unwrap_or_default()
     }
 
     fn known_peers(&self) -> &KnownPeers {
@@ -289,13 +301,17 @@ impl NetworkInner {
     }
 
     fn disconnect(&self, peer_id: PeerId) -> Result<()> {
-        self.active_peers
-            .remove(&peer_id, DisconnectReason::Requested);
+        let active_peers = self
+            .active_peers
+            .upgrade()
+            .ok_or_else(|| anyhow!("network has been shutdown"))?;
+        active_peers.remove(&peer_id, DisconnectReason::Requested);
         Ok(())
     }
 
     fn peer(&self, peer_id: PeerId) -> Option<Peer> {
-        let connection = self.active_peers.get(&peer_id)?;
+        let active_peers = self.active_peers.upgrade()?;
+        let connection = active_peers.get(&peer_id)?;
         Some(Peer::new(connection, self.outbound_request_layer.clone()))
     }
 

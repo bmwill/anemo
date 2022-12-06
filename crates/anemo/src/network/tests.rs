@@ -217,8 +217,8 @@ async fn basic_connectivity_check() -> Result<()> {
         affinity: crate::types::PeerAffinity::High,
         address: vec![network_2.local_addr().into()],
     };
-    let mut subscriber_1 = network_1.0.active_peers.subscribe().0;
-    let mut subscriber_2 = network_2.0.active_peers.subscribe().0;
+    let mut subscriber_1 = network_1.subscribe()?.0;
+    let mut subscriber_2 = network_2.subscribe()?.0;
 
     network_1.known_peers().insert(peer_info_2);
 
@@ -294,6 +294,22 @@ async fn drop_shutdown() -> Result<()> {
         .unwrap_err();
 
     tracing::info!("err: {err}");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn subscribe_channel_closes_on_shutdown() -> Result<()> {
+    let _gaurd = crate::init_tracing_for_testing();
+    let network = build_network()?;
+    let mut subscriber = network.subscribe()?.0;
+
+    drop(network);
+
+    assert_eq!(
+        Err(tokio::sync::broadcast::error::RecvError::Closed),
+        subscriber.recv().await
+    );
 
     Ok(())
 }

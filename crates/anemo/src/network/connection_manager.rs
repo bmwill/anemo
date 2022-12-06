@@ -467,6 +467,19 @@ impl ActivePeers {
     fn inner_mut(&self) -> std::sync::RwLockWriteGuard<'_, ActivePeersInner> {
         self.0.write().unwrap()
     }
+
+    pub fn downgrade(&self) -> ActivePeersRef {
+        ActivePeersRef(Arc::downgrade(&self.0))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ActivePeersRef(std::sync::Weak<RwLock<ActivePeersInner>>);
+
+impl ActivePeersRef {
+    pub fn upgrade(&self) -> Option<ActivePeers> {
+        self.0.upgrade().map(ActivePeers)
+    }
 }
 
 #[derive(Debug)]
