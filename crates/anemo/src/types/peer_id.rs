@@ -1,14 +1,20 @@
-use serde::{Deserialize, Serialize};
-
 /// Length of a PeerId, based on the length of an ed25519 public key
 const PEER_ID_LENGTH: usize = 32;
 
-#[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct PeerId(pub [u8; PEER_ID_LENGTH]);
 
 impl PeerId {
     pub fn short_display(&self, len: u8) -> impl std::fmt::Display + '_ {
         ShortPeerId(self, len)
+    }
+
+    #[cfg(test)]
+    fn random() -> Self {
+        let mut rng = rand::thread_rng();
+        let mut bytes = [0u8; 32];
+        rand::RngCore::fill_bytes(&mut rng, &mut bytes[..]);
+        Self(bytes)
     }
 }
 
@@ -25,6 +31,38 @@ impl std::fmt::Display for PeerId {
 impl std::fmt::Debug for PeerId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "PeerId({})", self)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for PeerId {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::Error;
+
+        if deserializer.is_human_readable() {
+            let s = <String>::deserialize(deserializer)?;
+
+            hex::FromHex::from_hex(s)
+                .map_err(D::Error::custom)
+                .map(Self)
+        } else {
+            <[u8; PEER_ID_LENGTH]>::deserialize(deserializer).map(Self)
+        }
+    }
+}
+
+impl serde::Serialize for PeerId {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        if serializer.is_human_readable() {
+            hex::encode(self.0).serialize(serializer)
+        } else {
+            self.0.serialize(serializer)
+        }
     }
 }
 
@@ -144,5 +182,29 @@ mod test {
 
         let short_str = peer_id.short_display(num_bytes_to_display).to_string();
         assert_eq!(short_str.len(), num_hex_digits as usize);
+    }
+
+    #[test]
+    fn test_serde_json() {
+        let peer_id = PeerId::random();
+        let hex = hex::encode(peer_id.0);
+        let json_hex = format!("\"{hex}\"");
+
+        let json = serde_json::to_string(&peer_id).unwrap();
+        let json_peer_id: PeerId = serde_json::from_str(&json_hex).unwrap();
+
+        assert_eq!(json, json_hex);
+        assert_eq!(peer_id, json_peer_id);
+    }
+
+    #[test]
+    fn test_bincode() {
+        let peer_id = PeerId::random();
+
+        let bincode = bincode::serialize(&peer_id).unwrap();
+        let bincode_peer_id: PeerId = bincode::deserialize(&peer_id.0).unwrap();
+
+        assert_eq!(bincode, peer_id.0);
+        assert_eq!(peer_id, bincode_peer_id);
     }
 }
