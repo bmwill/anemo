@@ -325,6 +325,45 @@ mod test {
         Ok(())
     }
 
+    #[tokio::test]
+    async fn peers_concurrently_finishing_uni_stream_before_accepting() -> Result<()> {
+        let _gaurd = crate::init_tracing_for_testing();
+
+        let msg = b"hello";
+        let config_1 = EndpointConfig::random("test");
+        let endpoint_1 = Endpoint::new_with_address(config_1, "localhost:0")?;
+
+        let config_2 = EndpointConfig::random("test");
+        let endpoint_2 = Endpoint::new_with_address(config_2, "localhost:0")?;
+        let addr_2 = endpoint_2.local_addr();
+
+        let (connection_1_to_2, connection_2_to_1) = timeout(join(
+            async { endpoint_1.connect(addr_2.into()).unwrap().await.unwrap() },
+            async { endpoint_2.accept().await.unwrap().await.unwrap() },
+        ))
+        .await
+        .unwrap();
+
+        // Send all the data
+        {
+            let mut send_stream = connection_1_to_2.open_uni().await.unwrap();
+            send_stream.write_all(msg).await.unwrap();
+            send_stream.finish().await.unwrap();
+        }
+
+        // Read it all
+        {
+            let mut recv = connection_2_to_1.accept_uni().await.unwrap();
+            let mut buf = Vec::new();
+            AsyncReadExt::read_to_end(&mut recv, &mut buf)
+                .await
+                .unwrap();
+            assert_eq!(buf, msg);
+        }
+
+        Ok(())
+    }
+
     async fn timeout<F: std::future::Future>(
         f: F,
     ) -> Result<F::Output, tokio::time::error::Elapsed> {
