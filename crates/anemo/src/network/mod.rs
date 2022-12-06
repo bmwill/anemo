@@ -255,6 +255,11 @@ impl Network {
     pub fn downgrade(&self) -> NetworkRef {
         NetworkRef(Arc::downgrade(&self.0))
     }
+
+    /// Returns true if the network has been shutdown.
+    pub fn is_closed(&self) -> bool {
+        self.0.is_closed()
+    }
 }
 
 struct NetworkInner {
@@ -296,7 +301,7 @@ impl NetworkInner {
                 addr, peer_id, sender,
             ))
             .await
-            .expect("ConnectionManager should still be up");
+            .map_err(|_| anyhow!("network has been shutdown"))?;
         reciever.await?
     }
 
@@ -321,6 +326,11 @@ impl NetworkInner {
             .rpc(request)
             .await
     }
+
+    /// Returns true if the network has been shutdown.
+    fn is_closed(&self) -> bool {
+        self.connection_manager_handle.is_closed()
+    }
 }
 
 /// Weak reference to a [`Network`] handle.
@@ -342,8 +352,11 @@ impl NetworkRef {
     /// Attempts to upgrade this weak reference to a [`Network`] handle, delaying the dropping of
     /// the network if successful.
     ///
-    /// Returns [`None`] if the network has already been dropped.
+    /// Returns [`None`] if the network has already been dropped or shutdown.
     pub fn upgrade(&self) -> Option<Network> {
-        self.0.upgrade().map(Network)
+        self.0
+            .upgrade()
+            .map(Network)
+            .and_then(|network| (!network.0.is_closed()).then_some(network))
     }
 }
