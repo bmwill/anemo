@@ -151,7 +151,39 @@ impl ConnectionManager {
             }
         }
 
+        self.shutdown().await;
+
         info!("ConnectionManager ended");
+    }
+
+    // Proceed through a graceful shutdown process that will leave the underlying socket
+    // immediately re-bindable.
+    async fn shutdown(mut self) {
+        // Close the quinn endpoint. This starts the process of gracefully shutting down all
+        // connections, notifying the remote side of the endpoint's closure.
+        self.endpoint.close();
+
+        // Terminate any in-progress pending connections
+        self.pending_connections.shutdown().await;
+
+        // Wait for all connection handlers to terminate
+        while self.connection_handlers.join_next().await.is_some() {}
+        // At this point we shouldn't have any active peers
+        assert!(
+            self.active_peers.inner().connections.is_empty(),
+            "ActivePeers should be empty after all connection handlers have terminated"
+        );
+
+        // wait for the endpoint to be idle
+        self.endpoint.wait_idle().await;
+
+        // This is a small hack in order to ensure that the underlying socket we're bound to is
+        // dropped and immediately available to be rebound to once this function exits.
+        // In essence we construct a new UdpSocket, bound on some ephemeral localhost port, and
+        // swap it in for the socket the endpoint is currently bound to, causing it to be dropped
+        // and freed.
+        let socket = std::net::UdpSocket::bind((std::net::Ipv4Addr::LOCALHOST, 0)).unwrap();
+        self.endpoint.rebind(socket).unwrap();
     }
 
     /// This method adds an established connection with a peer to the map of active peers.
@@ -604,7 +636,7 @@ impl KnownPeers {
 
 #[cfg(test)]
 mod tests {
-    use super::DialBackoffState;
+    use super::*;
     use std::time::{Duration, Instant};
 
     #[test]
@@ -642,5 +674,35 @@ mod tests {
             assert_eq!(state.attempts, attempt);
             assert_eq!(state.backoff - now, max_back_off);
         }
+    }
+
+    #[tokio::test]
+    async fn shutdown() {
+        let socket = std::net::UdpSocket::bind((std::net::Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let address = socket.local_addr().unwrap();
+        let config = crate::config::EndpointConfig::random("test");
+        let endpoint = Arc::new(Endpoint::new(config, socket).unwrap());
+        let (connection_manager, sender) = ConnectionManager::new(
+            Default::default(),
+            endpoint,
+            ActivePeers::new(1),
+            Default::default(),
+            echo_service(),
+        );
+
+        connection_manager.shutdown().await;
+        assert!(sender.is_closed());
+        // Should be able to rebind the socket immediately
+        std::net::UdpSocket::bind(address).unwrap();
+    }
+
+    fn echo_service() -> BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible> {
+        let handle = move |request: Request<Bytes>| async move {
+            trace!("recieved: {}", request.body().escape_ascii());
+            let response = Response::new(request.into_body());
+            Result::<Response<Bytes>, Infallible>::Ok(response)
+        };
+
+        tower::ServiceExt::boxed_clone(tower::service_fn(handle))
     }
 }
