@@ -93,6 +93,8 @@ impl InboundRequestHandler {
             crate::types::DisconnectReason::ConnectionLost,
         );
 
+        inflight_requests.shutdown().await;
+
         debug!(peer =% self.connection.peer_id(), "InboundRequestHandler ended");
     }
 }
