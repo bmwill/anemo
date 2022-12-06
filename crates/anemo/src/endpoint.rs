@@ -91,8 +91,31 @@ impl Endpoint {
     /// Close all of this endpoint's connections immediately and cease accepting new connections.
     pub fn close(&self) {
         trace!("Closing endpoint");
-        // let _ = self.termination_tx.send(());
         self.inner.close(0_u32.into(), b"endpoint closed")
+    }
+
+    /// Wait for all connections on the endpoint to be cleanly shut down
+    ///
+    /// Waiting for this condition before exiting ensures that a good-faith effort is made to notify
+    /// peers of recent connection closes, whereas exiting immediately could force them to wait out
+    /// the idle timeout period.
+    ///
+    /// Does not proactively close existing connections or cause incoming connections to be
+    /// rejected. Consider calling [`close()`] if that is desired.
+    ///
+    /// [`close()`]: Endpoint::close
+    pub async fn wait_idle(&self) {
+        self.inner.wait_idle().await;
+    }
+
+    /// Switch to a new UDP socket
+    ///
+    /// Allows the endpoint's address to be updated live, affecting all active connections. Incoming
+    /// connections and connections to servers unreachable from the new address will be lost.
+    ///
+    /// On error, the old UDP socket is retained.
+    pub fn rebind(&self, socket: std::net::UdpSocket) -> std::io::Result<()> {
+        self.inner.rebind(socket)
     }
 
     /// Get the next incoming connection attempt from a client
