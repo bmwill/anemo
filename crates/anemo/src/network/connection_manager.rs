@@ -46,6 +46,9 @@ pub(crate) struct ConnectionManager {
     /// Set of pending inbound and outbound connections.
     pending_connections: JoinSet<ConnectingOutput>,
 
+    /// Handles to the request handlers for all current connections.
+    connection_handlers: JoinSet<()>,
+
     /// A map of all the inflight attempts to establish outbound connections started internally due
     /// to a peer being configured as a KnownPeer.
     pending_dials: HashMap<PeerId, oneshot::Receiver<Result<PeerId>>>,
@@ -78,6 +81,7 @@ impl ConnectionManager {
                 endpoint,
                 mailbox: receiver,
                 pending_connections: JoinSet::new(),
+                connection_handlers: JoinSet::new(),
                 pending_dials: HashMap::default(),
                 dial_backoff_states: HashMap::default(),
                 active_peers,
@@ -140,6 +144,10 @@ impl ConnectionManager {
                 Some(connecting_output) = self.pending_connections.join_next() => {
                     self.handle_connecting_result(connecting_output.unwrap());
                 },
+                Some(connection_handler_output) = self.connection_handlers.join_next() => {
+                    // If a task panics, just propagate it
+                    connection_handler_output.unwrap();
+                },
             }
         }
 
@@ -159,10 +167,9 @@ impl ConnectionManager {
                 self.active_peers.clone(),
             );
 
-            // TODO think about holding onto a handle to the ConnectionHandler task so that we can
-            // cancel them and maybe even get rid of the need for the handler to hold onto the set
-            // of active peers
-            tokio::spawn(request_handler.start());
+            // TODO think about removing the need to pass in the active set of peers to the
+            // connection handlers and instead process their removal from the main event loop
+            self.connection_handlers.spawn(request_handler.start());
         }
     }
 
