@@ -256,6 +256,11 @@ impl Network {
         NetworkRef(Arc::downgrade(&self.0))
     }
 
+    /// Shutdown the Network.
+    pub async fn shutdown(&self) -> Result<()> {
+        self.0.shutdown().await
+    }
+
     /// Returns true if the network has been shutdown.
     pub fn is_closed(&self) -> bool {
         self.0.is_closed()
@@ -325,6 +330,15 @@ impl NetworkInner {
             .ok_or_else(|| anyhow!("not connected to peer {peer_id}"))?
             .rpc(request)
             .await
+    }
+
+    async fn shutdown(&self) -> Result<()> {
+        let (sender, reciever) = oneshot::channel();
+        self.connection_manager_handle
+            .send(ConnectionManagerRequest::Shutdown(sender))
+            .await
+            .map_err(|_| anyhow!("network has been shutdown"))?;
+        reciever.await.map_err(Into::into)
     }
 
     /// Returns true if the network has been shutdown.

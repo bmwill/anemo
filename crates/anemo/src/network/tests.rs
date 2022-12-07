@@ -299,6 +299,63 @@ async fn drop_shutdown() -> Result<()> {
 }
 
 #[tokio::test]
+async fn explicit_shutdown() -> Result<()> {
+    use tokio::sync::mpsc::error::TryRecvError;
+
+    let _gaurd = crate::init_tracing_for_testing();
+
+    let (sender, mut reciever) = tokio::sync::mpsc::channel::<()>(1);
+
+    let service = {
+        let handle = move |request: Request<Bytes>| {
+            let sender = sender.clone();
+            async move {
+                let _sender = sender;
+                let response = Response::new(request.into_body());
+                Result::<Response<Bytes>, Infallible>::Ok(response)
+            }
+        };
+
+        tower::service_fn(handle)
+    };
+
+    let network = Network::bind("localhost:0")
+        .random_private_key()
+        .server_name("test")
+        .start(service)?;
+
+    let network_2 = build_network()?;
+
+    let peer = network_2.connect(network.local_addr()).await?;
+    let _response = network_2.rpc(peer, Request::new(Bytes::new())).await?;
+
+    assert_eq!(Err(TryRecvError::Empty), reciever.try_recv());
+
+    let network_ref = network.downgrade();
+
+    // Just check to see if upgrade is successful
+    assert!(network_ref.upgrade().is_some());
+
+    // shutdown the network
+    network.shutdown().await?;
+
+    // Now network upgrading should fail
+    assert!(network_ref.upgrade().is_none());
+
+    // And all clones of the service should have been dropped by now
+    assert_eq!(Err(TryRecvError::Disconnected), reciever.try_recv());
+
+    let err = network_2
+        .rpc(peer, Request::new(Bytes::new()))
+        .await
+        .unwrap_err();
+
+    tracing::info!("err: {err}");
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn subscribe_channel_closes_on_shutdown() -> Result<()> {
     let _gaurd = crate::init_tracing_for_testing();
     let network = build_network()?;
@@ -310,6 +367,24 @@ async fn subscribe_channel_closes_on_shutdown() -> Result<()> {
         Err(tokio::sync::broadcast::error::RecvError::Closed),
         subscriber.recv().await
     );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn subscribe_channel_closes_on_explicit_shutdown() -> Result<()> {
+    let _gaurd = crate::init_tracing_for_testing();
+    let network = build_network()?;
+    let mut subscriber = network.subscribe()?.0;
+
+    network.shutdown().await?;
+
+    assert_eq!(
+        Err(tokio::sync::broadcast::error::TryRecvError::Closed),
+        subscriber.try_recv(),
+    );
+
+    assert!(network.subscribe().is_err());
 
     Ok(())
 }

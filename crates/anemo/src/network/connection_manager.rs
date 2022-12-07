@@ -23,6 +23,7 @@ use tracing::{debug, info, instrument, trace};
 #[derive(Debug)]
 pub enum ConnectionManagerRequest {
     ConnectRequest(Address, Option<PeerId>, oneshot::Sender<Result<PeerId>>),
+    Shutdown(oneshot::Sender<()>),
 }
 
 struct ConnectingOutput {
@@ -115,6 +116,8 @@ impl ConnectionManager {
         let mut interval =
             tokio::time::interval(self.config.connectivity_check_interval() + jitter);
 
+        let mut shutdown_notifier = None;
+
         loop {
             tokio::select! {
                 now = interval.tick() => {
@@ -134,6 +137,10 @@ impl ConnectionManager {
                         ConnectionManagerRequest::ConnectRequest(address, peer_id, oneshot) => {
                             self.handle_connect_request(address, peer_id, oneshot);
                         }
+                        ConnectionManagerRequest::Shutdown(oneshot) => {
+                            shutdown_notifier = Some(oneshot);
+                            break;
+                        }
                     }
                 }
                 connecting = self.endpoint.accept() => {
@@ -152,6 +159,10 @@ impl ConnectionManager {
         }
 
         self.shutdown().await;
+
+        if let Some(sender) = shutdown_notifier {
+            let _ = sender.send(());
+        }
 
         info!("ConnectionManager ended");
     }
