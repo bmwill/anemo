@@ -100,6 +100,70 @@ async fn connect_with_hostname() -> Result<()> {
     Ok(())
 }
 
+#[tokio::test]
+async fn max_concurrent_connections_0() -> Result<()> {
+    let _gaurd = crate::init_tracing_for_testing();
+
+    // Setup a network which disallows all incoming connections
+    let config = crate::Config {
+        max_concurrent_connections: Some(0),
+        ..Default::default()
+    };
+    let network_1 = Network::bind("localhost:0")
+        .random_private_key()
+        .server_name("test")
+        .config(config)
+        .start(echo_service())?;
+
+    let network_2 = build_network()?;
+
+    network_2
+        .connect_with_peer_id(network_1.local_addr(), network_1.peer_id())
+        .await
+        .unwrap_err();
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn max_concurrent_connections_1() -> Result<()> {
+    let _gaurd = crate::init_tracing_for_testing();
+
+    // Setup a network which disallows all incoming connections
+    let config = crate::Config {
+        max_concurrent_connections: Some(1),
+        ..Default::default()
+    };
+    let network_1 = Network::bind("localhost:0")
+        .random_private_key()
+        .server_name("test")
+        .config(config)
+        .start(echo_service())?;
+
+    let network_2 = build_network()?;
+    let network_3 = build_network()?;
+
+    // first connection succeeds
+    network_2
+        .connect_with_peer_id(network_1.local_addr(), network_1.peer_id())
+        .await
+        .unwrap();
+
+    // second connection fails
+    network_3
+        .connect_with_peer_id(network_1.local_addr(), network_1.peer_id())
+        .await
+        .unwrap_err();
+
+    // explicitly making an outbound connection bypasses this limit
+    network_1
+        .connect_with_peer_id(network_3.local_addr(), network_3.peer_id())
+        .await
+        .unwrap();
+
+    Ok(())
+}
+
 fn build_network() -> Result<Network> {
     build_network_with_addr("localhost:0")
 }
