@@ -244,27 +244,30 @@ impl ConnectionManager {
         let fut = async {
             let connection = connecting.await?;
 
-            // Check against limit
-            if let Some(limit) = config.max_concurrent_connections() {
-                // We've hit the limit
-                // TODO maybe have a way to temporatily hold on to a "slot" so that we can ensure
-                // we don't go over this limit if multiple connections come in simultaneously.
-                if active_peers.len() >= limit {
-                    // check if this is a high affinity peer to bypass the limit
-                    match known_peers.get(&connection.peer_id()) {
-                        Some(PeerInfo { affinity, .. })
-                            if matches!(affinity, PeerAffinity::High) =>
-                        {
-                            // Do nothing, let the connection through
-                        }
-                        // Connection doesn't meet the requirements to bypass the limit so bail
-                        // TODO close the connection explicitly with a reason once we have machine
-                        // readable errors
-                        _ => {
+            // TODO close the connection explicitly with a reason once we have machine
+            // readable errors. See https://github.com/MystenLabs/anemo/issues/13 for more info.
+            match known_peers.get(&connection.peer_id()) {
+                Some(PeerInfo { affinity, .. }) if matches!(affinity, PeerAffinity::High) => {
+                    // Do nothing, let the connection through
+                }
+                Some(PeerInfo { affinity, .. }) if matches!(affinity, PeerAffinity::Never) => {
+                    return Err(anyhow::anyhow!(
+                        "rejecting connection from peer {} due to having PeerAffinity::Never",
+                        connection.peer_id()
+                    ));
+                }
+                // Check connection Limits
+                _ => {
+                    if let Some(limit) = config.max_concurrent_connections() {
+                        // We've hit the limit
+                        // TODO maybe have a way to temporatily hold on to a "slot" so that we can ensure
+                        // we don't go over this limit if multiple connections come in simultaneously.
+                        if active_peers.len() >= limit {
+                            // Connection doesn't meet the requirements to bypass the limit so bail
                             return Err(anyhow::anyhow!(
                                 "dropping connection from peer {} due to connection limits",
                                 connection.peer_id()
-                            ))
+                            ));
                         }
                     }
                 }
@@ -368,7 +371,8 @@ impl ConnectionManager {
             known_peers
                 .values()
                 .filter(|peer_info| {
-                    peer_info.peer_id != self.endpoint.peer_id() // We don't dial ourself
+                    !matches!(peer_info.affinity, PeerAffinity::Never)
+                    && peer_info.peer_id != self.endpoint.peer_id() // We don't dial ourself
                     && !peer_info.address.is_empty() // The peer has an address we can dial
                     && !active_peers.contains(&peer_info.peer_id) // The node is not already connected.
                     && !self.pending_dials.contains_key(&peer_info.peer_id) // There is no pending dial to this node.

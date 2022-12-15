@@ -210,6 +210,75 @@ async fn max_concurrent_connections_1() -> Result<()> {
     Ok(())
 }
 
+#[tokio::test]
+async fn reject_peer_with_affinity_never() -> Result<()> {
+    let _gaurd = crate::init_tracing_for_testing();
+
+    let network_1 = build_network()?;
+    let network_2 = build_network()?;
+
+    // Configure peer 2 with affinity never
+    let peer_info_2 = crate::types::PeerInfo {
+        peer_id: network_2.peer_id(),
+        affinity: crate::types::PeerAffinity::Never,
+        address: vec![],
+    };
+    network_1.known_peers().insert(peer_info_2);
+
+    // When peer 2 tries to connect peer 1 will reject it
+    network_2
+        .connect_with_peer_id(network_1.local_addr(), network_1.peer_id())
+        .await
+        .unwrap_err();
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn peers_with_affinity_never_are_not_dialed_in_the_background() -> Result<()> {
+    let _gaurd = crate::init_tracing_for_testing();
+
+    let network_1 = build_network()?;
+    let network_2 = build_network()?;
+    let network_3 = build_network()?;
+
+    let mut subscriber_1 = network_1.subscribe()?.0;
+
+    // Configure peer 2 with affinity never
+    let peer_info_2 = crate::types::PeerInfo {
+        peer_id: network_2.peer_id(),
+        affinity: crate::types::PeerAffinity::Never,
+        address: vec![],
+    };
+    network_1.known_peers().insert(peer_info_2);
+    // Configure peer 3 with high affinity
+    let peer_info_3 = crate::types::PeerInfo {
+        peer_id: network_3.peer_id(),
+        affinity: crate::types::PeerAffinity::High,
+        address: vec![network_3.local_addr().into()],
+    };
+    network_1.known_peers().insert(peer_info_3);
+
+    // When peer 2 tries to connect peer 1 will reject it
+    network_2
+        .connect_with_peer_id(network_1.local_addr(), network_1.peer_id())
+        .await
+        .unwrap_err();
+
+    // We only ever see connections being made/lost with peer 3 and not peer 2
+    let peer_id_3 = network_3.peer_id();
+    assert_eq!(PeerEvent::NewPeer(peer_id_3), subscriber_1.recv().await?);
+
+    drop(network_3);
+
+    assert_eq!(
+        PeerEvent::LostPeer(peer_id_3, crate::types::DisconnectReason::ConnectionLost),
+        subscriber_1.recv().await?
+    );
+
+    Ok(())
+}
+
 fn build_network() -> Result<Network> {
     build_network_with_addr("localhost:0")
 }
