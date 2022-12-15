@@ -57,6 +57,27 @@ pub struct Config {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_concurrent_outstanding_connecting_connections: Option<usize>,
 
+    /// Maximum number of concurrent connections to have established at a given point in time.
+    ///
+    /// This limit is applied in the following ways:
+    ///  - Inbound connections from [`KnownPeers`] with [`PeerAffinity::High`] bypass this limit. All
+    ///  other inbound connections are only accepted if the total number of inbound and outbound
+    ///  connections is less than this limit.
+    ///  - Outbound connections explicitly made by the application via [`Network::connect`] or
+    ///  [`Network::connect_with_peer_id`] bypass this limit.
+    ///  - Outbound connections made in the background, due to configured [`KnownPeers`], to peers with
+    ///  [`PeerAffinity::High`] bypass this limit and are always attempted, while peers with lower
+    ///  affinity respect this limit.
+    ///
+    /// If unspecified, there will be no limit on the number of concurrent connections.
+    ///
+    /// [`KnownPeers`]: crate::KnownPeers
+    /// [`PeerAffinity::High`]: crate::types::PeerAffinity::High
+    /// [`Network::connect`]: crate::Network::connect
+    /// [`Network::connect_with_peer_id`]: crate::Network::connect_with_peer_id
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_concurrent_connections: Option<usize>,
+
     /// Size of the broadcast channel use for subscribing to
     /// [`PeerEvent`](crate::types::PeerEvent)s via
     /// [`Network::subscribe`](crate::Network::subscribe).
@@ -178,6 +199,10 @@ impl Config {
 
         self.max_concurrent_outstanding_connecting_connections
             .unwrap_or(MAX_CONCURRENT_OUTSTANDING_CONNECTING_CONNECTIONS)
+    }
+
+    pub(crate) fn max_concurrent_connections(&self) -> Option<usize> {
+        self.max_concurrent_connections
     }
 
     pub(crate) fn peer_event_broadcast_channel_capacity(&self) -> usize {
