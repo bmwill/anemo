@@ -1,4 +1,4 @@
-use crate::{Network, NetworkRef, Request, Response, Result};
+use crate::{types::PeerEvent, Network, NetworkRef, Request, Response, Result};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use std::convert::Infallible;
 use tower::{util::BoxCloneService, ServiceExt};
@@ -69,6 +69,52 @@ async fn connect_with_invalid_peer_id() -> Result<()> {
         .connect_with_peer_id(network_2.local_addr(), network_3.peer_id())
         .await
         .unwrap_err();
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn connect_with_invalid_peer_id_ensure_server_doesnt_succeed() -> Result<()> {
+    let _gaurd = crate::init_tracing_for_testing();
+
+    let network_1 = build_network()?;
+    let network_2 = build_network()?;
+    let network_3 = build_network()?;
+
+    let (mut subscriber_2, _) = network_2.subscribe().unwrap();
+
+    // Try to dial network 2, but with network 3's peer id
+    network_1
+        .connect_with_peer_id(network_2.local_addr(), network_3.peer_id())
+        .await
+        .unwrap_err();
+
+    tokio::task::yield_now().await;
+
+    // network 2 dialing 3 should succeed
+    network_2
+        .connect_with_peer_id(network_3.local_addr(), network_3.peer_id())
+        .await
+        .unwrap();
+
+    assert_eq!(
+        subscriber_2.try_recv(),
+        Ok(PeerEvent::NewPeer(network_3.peer_id()))
+    );
+
+    drop(network_2);
+
+    assert_eq!(
+        subscriber_2.recv().await,
+        Ok(PeerEvent::LostPeer(
+            network_3.peer_id(),
+            crate::types::DisconnectReason::ConnectionLost
+        )),
+    );
+    assert_eq!(
+        subscriber_2.recv().await,
+        Err(tokio::sync::broadcast::error::RecvError::Closed),
+    );
 
     Ok(())
 }
