@@ -228,17 +228,20 @@ impl ConnectionManager {
         trace!("received new incoming connection");
 
         self.pending_connections
-            .spawn(Self::handle_incoming_task(connecting));
+            .spawn(Self::handle_incoming_task(connecting, self.config.clone()));
     }
 
-    async fn handle_incoming_task(connecting: Connecting) -> ConnectingOutput {
+    async fn handle_incoming_task(connecting: Connecting, config: Arc<Config>) -> ConnectingOutput {
         let fut = async {
             let connection = connecting.await?;
 
             Ok(connection)
         };
 
-        let connecting_result = fut.await;
+        let connecting_result = tokio::time::timeout(config.connect_timeout(), fut)
+            .await
+            .map_err(Into::into)
+            .and_then(std::convert::identity);
 
         ConnectingOutput {
             connecting_result,
@@ -388,6 +391,7 @@ impl ConnectionManager {
             target_address,
             peer_id,
             oneshot,
+            self.config.clone(),
         ));
     }
 
@@ -398,6 +402,7 @@ impl ConnectionManager {
         target_address: Address,
         peer_id: Option<PeerId>,
         oneshot: oneshot::Sender<Result<PeerId>>,
+        config: Arc<Config>,
     ) -> ConnectingOutput {
         let fut = async {
             let connection = maybe_connecting?.await?;
@@ -405,7 +410,10 @@ impl ConnectionManager {
             Ok(connection)
         };
 
-        let connecting_result = fut.await;
+        let connecting_result = tokio::time::timeout(config.connect_timeout(), fut)
+            .await
+            .map_err(Into::into)
+            .and_then(std::convert::identity);
 
         ConnectingOutput {
             connecting_result,
