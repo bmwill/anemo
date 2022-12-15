@@ -44,9 +44,12 @@ pub mod header {
 
 #[derive(Clone, Copy, Debug)]
 pub enum PeerAffinity {
-    /// Always attempt to maintain a connection with this Peer
+    /// Always attempt to maintain a connection with this Peer.
     High,
-    // None,
+    /// Never attempt to maintain a connection with this Peer.
+    ///
+    /// Inbound connection requests from these Peers are rejected.
+    Never,
 }
 
 #[derive(Clone, Debug)]
