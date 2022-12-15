@@ -45,6 +45,12 @@ pub struct Config {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub connection_backoff_ms: Option<u64>,
 
+    /// Set a timeout, in milliseconds, for all inbound and outbound connects.
+    ///
+    /// In unspecified, this will default to `10,000` milliseconds.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub connect_timeout_ms: Option<u64>,
+
     /// Maximum number of concurrent connections to attempt to establish at a given point in time.
     ///
     /// If unspecified, this will default to `100`.
@@ -159,6 +165,12 @@ impl Config {
         const CONNECTION_BACKOFF_MS: u64 = 10_000; // 10 seconds
 
         Duration::from_millis(self.connection_backoff_ms.unwrap_or(CONNECTION_BACKOFF_MS))
+    }
+
+    pub(crate) fn connect_timeout(&self) -> Duration {
+        const CONNECTION_TIMEOUT_MS: u64 = 10_000; // 10 seconds
+
+        Duration::from_millis(self.connect_timeout_ms.unwrap_or(CONNECTION_TIMEOUT_MS))
     }
 
     pub(crate) fn max_concurrent_outstanding_connecting_connections(&self) -> usize {
