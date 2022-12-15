@@ -3,7 +3,7 @@ use crate::{
     config::Config,
     connection::Connection,
     endpoint::{Connecting, Endpoint},
-    types::{Address, DisconnectReason, PeerEvent, PeerInfo},
+    types::{Address, DisconnectReason, PeerAffinity, PeerEvent, PeerInfo},
     ConnectionOrigin, PeerId, Request, Response, Result,
 };
 use bytes::Bytes;
@@ -227,13 +227,48 @@ impl ConnectionManager {
     fn handle_incoming(&mut self, connecting: Connecting) {
         trace!("received new incoming connection");
 
-        self.pending_connections
-            .spawn(Self::handle_incoming_task(connecting, self.config.clone()));
+        self.pending_connections.spawn(Self::handle_incoming_task(
+            connecting,
+            self.config.clone(),
+            self.active_peers.clone(),
+            self.known_peers.clone(),
+        ));
     }
 
-    async fn handle_incoming_task(connecting: Connecting, config: Arc<Config>) -> ConnectingOutput {
+    async fn handle_incoming_task(
+        connecting: Connecting,
+        config: Arc<Config>,
+        active_peers: ActivePeers,
+        known_peers: KnownPeers,
+    ) -> ConnectingOutput {
         let fut = async {
             let connection = connecting.await?;
+
+            // Check against limit
+            if let Some(limit) = config.max_concurrent_connections() {
+                // We've hit the limit
+                // TODO maybe have a way to temporatily hold on to a "slot" so that we can ensure
+                // we don't go over this limit if multiple connections come in simultaneously.
+                if active_peers.len() >= limit {
+                    // check if this is a high affinity peer to bypass the limit
+                    match known_peers.get(&connection.peer_id()) {
+                        Some(PeerInfo { affinity, .. })
+                            if matches!(affinity, PeerAffinity::High) =>
+                        {
+                            // Do nothing, let the connection through
+                        }
+                        // Connection doesn't meet the requirements to bypass the limit so bail
+                        // TODO close the connection explicitly with a reason once we have machine
+                        // readable errors
+                        _ => {
+                            return Err(anyhow::anyhow!(
+                                "dropping connection from peer {} due to connection limits",
+                                connection.peer_id()
+                            ))
+                        }
+                    }
+                }
+            }
 
             super::wire::handshake(connection).await
         };
@@ -516,6 +551,10 @@ impl ActivePeers {
         self.0.write().unwrap()
     }
 
+    fn len(&self) -> usize {
+        self.inner().len()
+    }
+
     pub fn downgrade(&self) -> ActivePeersRef {
         ActivePeersRef(Arc::downgrade(&self.0))
     }
@@ -553,6 +592,10 @@ impl ActivePeersInner {
 
     fn peers(&self) -> Vec<PeerId> {
         self.connections.keys().copied().collect()
+    }
+
+    fn len(&self) -> usize {
+        self.connections.len()
     }
 
     fn get(&self, peer_id: &PeerId) -> Option<Connection> {
