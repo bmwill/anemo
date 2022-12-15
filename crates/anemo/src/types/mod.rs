@@ -45,7 +45,12 @@ pub mod header {
 #[derive(Clone, Copy, Debug)]
 pub enum PeerAffinity {
     /// Always attempt to maintain a connection with this Peer.
+    // TODO always allow High peers, even in the event that we've reached our connection limit
     High,
+    /// Only attempt to maintain a connection with this Peer
+    /// if we haven't reached the configured connection limit.
+    // TODO block inbound connections from Low peers if we've reached our connection limit
+    Low,
     /// Never attempt to maintain a connection with this Peer.
     ///
     /// Inbound connection requests from these Peers are rejected.

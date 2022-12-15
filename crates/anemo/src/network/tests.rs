@@ -13,10 +13,11 @@ async fn basic_network() -> Result<()> {
     let network_1 = build_network()?;
     let network_2 = build_network()?;
 
-    let peer = network_1.connect(network_2.local_addr()).await?;
+    let peer = network_1.connect(network_2.local_addr()).await.unwrap();
     let response = network_1
         .rpc(peer, Request::new(msg.as_ref().into()))
-        .await?;
+        .await
+        .unwrap();
     assert_eq!(response.into_body(), msg.as_ref());
 
     let msg = b"Words of Radiance";

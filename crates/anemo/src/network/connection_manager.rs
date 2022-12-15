@@ -364,7 +364,7 @@ impl ConnectionManager {
                 Err(oneshot::error::TryRecvError::Empty) => true,
             });
 
-        let eligible: Vec<_> = {
+        let (eligible_high, eligible_low) = {
             let active_peers = self.active_peers.inner();
             let known_peers = self.known_peers.inner();
 
@@ -382,18 +382,35 @@ impl ConnectionManager {
                         .unwrap_or(true)
                 })
                 .cloned()
-                .collect()
+                // Partition the eligible nodes into nodes we'll always attempt (high affinity) and
+                // those we may not attempt due to limits
+                .partition::<Vec<_>, _>(|peer_info| {
+                    matches!(peer_info.affinity, crate::types::PeerAffinity::High)
+                })
         };
+
+        // Limit the number of low affinity peers to attempt to dial
+        let number_of_low_to_dial = std::cmp::min(
+            eligible_low.len(),
+            eligible_low.len(),
+            //TODO actually respect config
+            // self.config
+            //     .max_concurrent_connections(),
+            //     .saturating_sub(self.active_peers.len())
+            //     .saturating_sub(eligible_high.len()),
+        );
 
         // Limit the number of outstanding connections attempting to be established
         let number_to_dial = std::cmp::min(
-            eligible.len(),
+            eligible_high.len() + number_of_low_to_dial,
             self.config
                 .max_concurrent_outstanding_connecting_connections()
                 .saturating_sub(self.pending_connections.len()),
         );
 
-        for mut peer in eligible.into_iter().take(number_to_dial) {
+        let eligible = eligible_high.into_iter().chain(eligible_low.into_iter());
+
+        for mut peer in eligible.take(number_to_dial) {
             let (sender, receiver) = oneshot::channel();
 
             // Select the index of the address to dial by mapping the number of attempts we've made
