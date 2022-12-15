@@ -29,6 +29,33 @@ pub(crate) fn network_message_frame_codec() -> LengthDelimitedCodec {
         .new_codec()
 }
 
+/// Anemo requires mTLS in order to ensure that both sides of the connections are authenticated by
+/// the other. This is specifically required so that regaurdless of which peer initiaties a
+/// connection, both sides will be able to know the PeerId of the other side. One challenge with
+/// this is that due to the ordering of how certs are exchanged, the client side may think the
+/// connection is fully established when in reality the server may still reject the connection. To
+/// handle this anemo has a very brief handshake, essentially an ACK, that is initiated by the
+/// server side to inform the client that the server has finished establishing the connection.
+///
+/// Performing this small handshake will also enable the server side to make decisions about
+/// whether to keep the connection based on things like the client side's PeerId.
+pub(crate) async fn handshake(
+    connection: crate::connection::Connection,
+) -> Result<crate::connection::Connection> {
+    match connection.origin() {
+        crate::ConnectionOrigin::Inbound => {
+            let mut send_stream = connection.open_uni().await?;
+            write_version_frame(&mut send_stream, Version::V1).await?;
+            send_stream.finish().await?;
+        }
+        crate::ConnectionOrigin::Outbound => {
+            let mut recv_stream = connection.accept_uni().await?;
+            read_version_frame(&mut recv_stream).await?;
+        }
+    }
+    Ok(connection)
+}
+
 pub(crate) async fn read_version_frame<T: AsyncRead + Unpin>(
     recv_stream: &mut T,
 ) -> Result<Version> {
