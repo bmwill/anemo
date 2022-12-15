@@ -235,7 +235,7 @@ impl ConnectionManager {
         let fut = async {
             let connection = connecting.await?;
 
-            Ok(connection)
+            super::wire::handshake(connection).await
         };
 
         let connecting_result = tokio::time::timeout(config.connect_timeout(), fut)
@@ -407,7 +407,7 @@ impl ConnectionManager {
         let fut = async {
             let connection = maybe_connecting?.await?;
 
-            Ok(connection)
+            super::wire::handshake(connection).await
         };
 
         let connecting_result = tokio::time::timeout(config.connect_timeout(), fut)
