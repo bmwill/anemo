@@ -7,7 +7,6 @@ use crate::{
     ConnectionOrigin, PeerId, Request, Response, Result,
 };
 use bytes::Bytes;
-use futures::FutureExt;
 use std::{
     collections::{hash_map::Entry, HashMap},
     convert::Infallible,
@@ -227,13 +226,26 @@ impl ConnectionManager {
 
     fn handle_incoming(&mut self, connecting: Connecting) {
         trace!("received new incoming connection");
-        let connecting = connecting.map(|connecting_result| ConnectingOutput {
+
+        self.pending_connections
+            .spawn(Self::handle_incoming_task(connecting));
+    }
+
+    async fn handle_incoming_task(connecting: Connecting) -> ConnectingOutput {
+        let fut = async {
+            let connection = connecting.await?;
+
+            Ok(connection)
+        };
+
+        let connecting_result = fut.await;
+
+        ConnectingOutput {
             connecting_result,
             maybe_oneshot: None,
             target_address: None,
             target_peer_id: None,
-        });
-        self.pending_connections.spawn(connecting);
+        }
     }
 
     fn handle_connecting_result(
@@ -364,26 +376,43 @@ impl ConnectionManager {
         peer_id: Option<PeerId>,
         oneshot: oneshot::Sender<Result<PeerId>>,
     ) {
-        let target_address = Some(address.clone());
-        let connecting = if let Some(peer_id) = peer_id {
+        let target_address = address.clone();
+        let maybe_connecting = if let Some(peer_id) = peer_id {
             self.endpoint
                 .connect_with_expected_peer_id(address, peer_id)
         } else {
             self.endpoint.connect(address)
         };
-        let connecting = async move {
-            let connecting_result = match connecting {
-                Ok(connecting) => connecting.await,
-                Err(e) => Err(e),
-            };
-            ConnectingOutput {
-                connecting_result,
-                maybe_oneshot: Some(oneshot),
-                target_address,
-                target_peer_id: peer_id,
-            }
+        self.pending_connections.spawn(Self::dial_peer_task(
+            maybe_connecting,
+            target_address,
+            peer_id,
+            oneshot,
+        ));
+    }
+
+    // TODO maybe look at cloning the endpoint so that we can try multiple addresses in the event
+    // Address resolves to multiple ips.
+    async fn dial_peer_task(
+        maybe_connecting: Result<Connecting>,
+        target_address: Address,
+        peer_id: Option<PeerId>,
+        oneshot: oneshot::Sender<Result<PeerId>>,
+    ) -> ConnectingOutput {
+        let fut = async {
+            let connection = maybe_connecting?.await?;
+
+            Ok(connection)
         };
-        self.pending_connections.spawn(connecting);
+
+        let connecting_result = fut.await;
+
+        ConnectingOutput {
+            connecting_result,
+            maybe_oneshot: Some(oneshot),
+            target_address: Some(target_address),
+            target_peer_id: peer_id,
+        }
     }
 }
 
