@@ -11,12 +11,16 @@ async fn main() {
     info!("address: {:?}", network.local_addr());
 
     let result = network
-        .connect("validator-0.devnet.sui.io:8084")
-        // .connect("fullnode.devnet.sui.io:8084")
+        // .connect("validator-0.devnet.sui.io:8084")
+        // .connect("validator-2-udp.devnet.sui.io:8084")
+        .connect("fullnode-udp.devnet.sui.io:8084")
+        // .connect("fullnode-1.devnet.sui.io:8084")
+        // .connect("fullnode-udp.staging.sui.io")
         // .connect("43.201.94.190:8082")
         // .connect("sea-suival-0.testnet.sui.io:8082")
         .await;
     info!("{:?}", result);
+    tokio::time::sleep(std::time::Duration::from_secs(10)).await;
 }
 
 fn random_key() -> [u8; 32] {
