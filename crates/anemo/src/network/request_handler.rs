@@ -4,11 +4,12 @@ use super::{
 };
 use crate::{
     connection::{Connection, SendStream},
-    Request, Response, Result,
+    Config, Request, Response, Result,
 };
 use bytes::Bytes;
 use quinn::RecvStream;
 use std::convert::Infallible;
+use std::sync::Arc;
 use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
 use tower::{util::BoxCloneService, ServiceExt};
 use tracing::{debug, trace};
@@ -18,6 +19,7 @@ use tracing::{debug, trace};
 /// Currently only bi-directional streams are supported. Whenever a new request (stream) is
 /// received a new task is spawn to handle it.
 pub(crate) struct InboundRequestHandler {
+    config: Arc<Config>,
     connection: Connection,
 
     service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
@@ -26,11 +28,13 @@ pub(crate) struct InboundRequestHandler {
 
 impl InboundRequestHandler {
     pub fn new(
+        config: Arc<Config>,
         connection: Connection,
         service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
         active_peers: ActivePeers,
     ) -> Self {
         Self {
+            config,
             connection,
             service,
             active_peers,
@@ -60,7 +64,7 @@ impl InboundRequestHandler {
                         Ok((bi_tx, bi_rx)) => {
                             trace!("incoming bi stream! {}", bi_tx.id());
                             let request_handler =
-                                BiStreamRequestHandler::new(self.connection.clone(), self.service.clone(), bi_tx, bi_rx);
+                                BiStreamRequestHandler::new(&self.config, self.connection.clone(), self.service.clone(), bi_tx, bi_rx);
                             inflight_requests.spawn(request_handler.handle());
                         }
                         Err(e) => {
@@ -110,6 +114,7 @@ struct BiStreamRequestHandler {
 
 impl BiStreamRequestHandler {
     fn new(
+        config: &Config,
         connection: Connection,
         service: BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible>,
         send_stream: SendStream,
@@ -118,8 +123,8 @@ impl BiStreamRequestHandler {
         Self {
             connection,
             service,
-            send_stream: FramedWrite::new(send_stream, network_message_frame_codec()),
-            recv_stream: FramedRead::new(recv_stream, network_message_frame_codec()),
+            send_stream: FramedWrite::new(send_stream, network_message_frame_codec(config)),
+            recv_stream: FramedRead::new(recv_stream, network_message_frame_codec(config)),
         }
     }
 

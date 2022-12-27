@@ -169,7 +169,7 @@ impl Builder {
             tokio::spawn(connection_manager.start());
 
             NetworkInner {
-                _config: config,
+                config,
                 endpoint,
                 active_peers: active_peers_ref,
                 known_peers,
@@ -268,7 +268,7 @@ impl Network {
 }
 
 struct NetworkInner {
-    _config: Arc<Config>,
+    config: Arc<Config>,
     endpoint: Arc<Endpoint>,
     active_peers: ActivePeersRef,
     known_peers: KnownPeers,
@@ -322,7 +322,11 @@ impl NetworkInner {
     fn peer(&self, peer_id: PeerId) -> Option<Peer> {
         let active_peers = self.active_peers.upgrade()?;
         let connection = active_peers.get(&peer_id)?;
-        Some(Peer::new(connection, self.outbound_request_layer.clone()))
+        Some(Peer::new(
+            connection,
+            self.outbound_request_layer.clone(),
+            self.config.clone(),
+        ))
     }
 
     async fn rpc(&self, peer_id: PeerId, request: Request<Bytes>) -> Result<Response<Bytes>> {

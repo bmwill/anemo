@@ -204,6 +204,7 @@ impl ConnectionManager {
             .add(&self.endpoint.peer_id(), new_connection)
         {
             let request_handler = InboundRequestHandler::new(
+                self.config.clone(),
                 new_connection,
                 self.service.clone(),
                 self.active_peers.clone(),

@@ -2,9 +2,10 @@ use super::{
     wire::{network_message_frame_codec, read_response, write_request},
     OutboundRequestLayer,
 };
-use crate::{connection::Connection, PeerId, Request, Response, Result};
+use crate::{connection::Connection, Config, PeerId, Request, Response, Result};
 use bytes::Bytes;
 use futures::future::BoxFuture;
+use std::sync::Arc;
 use tokio_util::codec::{FramedRead, FramedWrite};
 use tower::{Layer, Service, ServiceExt};
 
@@ -13,16 +14,19 @@ use tower::{Layer, Service, ServiceExt};
 pub struct Peer {
     connection: Connection,
     outbound_request_layer: OutboundRequestLayer,
+    config: Arc<Config>,
 }
 
 impl Peer {
     pub(crate) fn new(
         connection: Connection,
         outbound_request_layer: OutboundRequestLayer,
+        config: Arc<Config>,
     ) -> Self {
         Self {
             connection,
             outbound_request_layer,
+            config,
         }
     }
 
@@ -36,8 +40,10 @@ impl Peer {
 
     async fn do_rpc(&self, request: Request<Bytes>) -> Result<Response<Bytes>> {
         let (send_stream, recv_stream) = self.connection.open_bi().await?;
-        let mut send_stream = FramedWrite::new(send_stream, network_message_frame_codec());
-        let mut recv_stream = FramedRead::new(recv_stream, network_message_frame_codec());
+        let mut send_stream =
+            FramedWrite::new(send_stream, network_message_frame_codec(&self.config));
+        let mut recv_stream =
+            FramedRead::new(recv_stream, network_message_frame_codec(&self.config));
 
         //
         // Write Request

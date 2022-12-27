@@ -18,15 +18,14 @@ const ANEMO: &[u8; 5] = b"anemo";
 
 /// Returns a fully configured length-delimited codec for writing/reading
 /// serialized frames to/from a socket.
-pub(crate) fn network_message_frame_codec() -> LengthDelimitedCodec {
-    //TODO pipe through config
-    let config = Config::default();
+pub(crate) fn network_message_frame_codec(config: &Config) -> LengthDelimitedCodec {
+    let mut builder = LengthDelimitedCodec::builder();
 
-    LengthDelimitedCodec::builder()
-        .max_frame_length(config.max_frame_size())
-        .length_field_length(4)
-        .big_endian()
-        .new_codec()
+    if let Some(max_frame_size) = config.max_frame_size() {
+        builder.max_frame_length(max_frame_size);
+    }
+
+    builder.length_field_length(4).big_endian().new_codec()
 }
 
 /// Anemo requires mTLS in order to ensure that both sides of the connections are authenticated by

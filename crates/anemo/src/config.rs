@@ -86,8 +86,14 @@ pub struct Config {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub peer_event_broadcast_channel_capacity: Option<usize>,
 
-    // TODO enable configuring of max frame size
-    // max_frame_size: Option<usize>,
+    /// Set the maximum frame size in bytes.
+    ///
+    /// This controls the maximum size of a request or response.
+    ///
+    /// If unspecified, there will be no limit.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_frame_size: Option<usize>,
+
     /// Set a timeout, in milliseconds, for all inbound requests.
     ///
     /// When an inbound timeout is hit when processing a request a Response is sent to the
@@ -212,12 +218,8 @@ impl Config {
             .unwrap_or(PEER_EVENT_BROADCAST_CHANNEL_CAPACITY)
     }
 
-    // TODO enable configuring of max frame size
-    pub(crate) fn max_frame_size(&self) -> usize {
-        const MAX_FRAME_SIZE: usize = 1 << 23; // 8 MiB
-
-        // self.max_frame_size.unwrap_or(MAX_FRAME_SIZE)
-        MAX_FRAME_SIZE
+    pub(crate) fn max_frame_size(&self) -> Option<usize> {
+        self.max_frame_size
     }
 
     pub(crate) fn inbound_request_timeout(&self) -> Option<Duration> {
