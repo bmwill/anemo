@@ -197,7 +197,7 @@ mod test {
 
     #[tokio::test]
     async fn basic_endpoint() -> Result<()> {
-        let _gaurd = crate::init_tracing_for_testing();
+        let _guard = crate::init_tracing_for_testing();
 
         let msg = b"hello";
         let config_1 = EndpointConfig::random("test");
@@ -249,7 +249,7 @@ mod test {
     // While we don't currently allow for this, we may want to eventually enable/allow for it.
     #[tokio::test]
     async fn multiple_connections() -> Result<()> {
-        let _gaurd = crate::init_tracing_for_testing();
+        let _guard = crate::init_tracing_for_testing();
 
         let msg = b"hello";
         let config_1 = EndpointConfig::random("test");
@@ -327,7 +327,7 @@ mod test {
 
     #[tokio::test]
     async fn peers_concurrently_finishing_uni_stream_before_accepting() -> Result<()> {
-        let _gaurd = crate::init_tracing_for_testing();
+        let _guard = crate::init_tracing_for_testing();
 
         let msg = b"hello";
         let config_1 = EndpointConfig::random("test");

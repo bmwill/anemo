@@ -80,7 +80,7 @@ impl Service<Request<Bytes>> for Peer {
 
     #[inline]
     fn call(&mut self, mut request: Request<Bytes>) -> Self::Future {
-        // Provide Connection Metadata to middleware layers via extentions including:
+        // Provide Connection Metadata to middleware layers via extensions including:
         // * PeerId
         // * Direction of the Request
         request.extensions_mut().insert(self.peer_id());

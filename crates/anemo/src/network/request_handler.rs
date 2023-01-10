@@ -143,7 +143,7 @@ impl BiStreamRequestHandler {
 
         // TODO maybe provide all of this via a single ConnectionMetadata type
         //
-        // Provide Connection Metadata to the handler via extentions including:
+        // Provide Connection Metadata to the handler via extensions including:
         // * PeerId
         // * ConnectionOrigin
         // * Remote SocketAddr

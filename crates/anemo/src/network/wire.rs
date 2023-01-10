@@ -29,7 +29,7 @@ pub(crate) fn network_message_frame_codec(config: &Config) -> LengthDelimitedCod
 }
 
 /// Anemo requires mTLS in order to ensure that both sides of the connections are authenticated by
-/// the other. This is specifically required so that regaurdless of which peer initiaties a
+/// the other. This is specifically required so that regardless of which peer initiates a
 /// connection, both sides will be able to know the PeerId of the other side. One challenge with
 /// this is that due to the ordering of how certs are exchanged, the client side may think the
 /// connection is fully established when in reality the server may still reject the connection. To

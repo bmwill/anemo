@@ -6,7 +6,7 @@ use tracing::trace;
 
 #[tokio::test]
 async fn basic_network() -> Result<()> {
-    let _gaurd = crate::init_tracing_for_testing();
+    let _guard = crate::init_tracing_for_testing();
 
     let msg = b"The Way of Kings";
 
@@ -30,7 +30,7 @@ async fn basic_network() -> Result<()> {
 
 #[tokio::test]
 async fn connect() -> Result<()> {
-    let _gaurd = crate::init_tracing_for_testing();
+    let _guard = crate::init_tracing_for_testing();
 
     let network_1 = build_network()?;
     let network_2 = build_network()?;
@@ -43,7 +43,7 @@ async fn connect() -> Result<()> {
 
 #[tokio::test]
 async fn connect_with_peer_id() -> Result<()> {
-    let _gaurd = crate::init_tracing_for_testing();
+    let _guard = crate::init_tracing_for_testing();
 
     let network_1 = build_network()?;
     let network_2 = build_network()?;
@@ -58,7 +58,7 @@ async fn connect_with_peer_id() -> Result<()> {
 
 #[tokio::test]
 async fn connect_with_invalid_peer_id() -> Result<()> {
-    let _gaurd = crate::init_tracing_for_testing();
+    let _guard = crate::init_tracing_for_testing();
 
     let network_1 = build_network()?;
     let network_2 = build_network()?;
@@ -75,7 +75,7 @@ async fn connect_with_invalid_peer_id() -> Result<()> {
 
 #[tokio::test]
 async fn connect_with_invalid_peer_id_ensure_server_doesnt_succeed() -> Result<()> {
-    let _gaurd = crate::init_tracing_for_testing();
+    let _guard = crate::init_tracing_for_testing();
 
     let network_1 = build_network()?;
     let network_2 = build_network()?;
@@ -121,7 +121,7 @@ async fn connect_with_invalid_peer_id_ensure_server_doesnt_succeed() -> Result<(
 
 #[tokio::test]
 async fn connect_with_hostname() -> Result<()> {
-    let _gaurd = crate::init_tracing_for_testing();
+    let _guard = crate::init_tracing_for_testing();
 
     let network_1 = build_network()?;
     let network_2 = build_network()?;
@@ -148,7 +148,7 @@ async fn connect_with_hostname() -> Result<()> {
 
 #[tokio::test]
 async fn max_concurrent_connections_0() -> Result<()> {
-    let _gaurd = crate::init_tracing_for_testing();
+    let _guard = crate::init_tracing_for_testing();
 
     // Setup a network which disallows all incoming connections
     let config = crate::Config {
@@ -173,7 +173,7 @@ async fn max_concurrent_connections_0() -> Result<()> {
 
 #[tokio::test]
 async fn max_concurrent_connections_1() -> Result<()> {
-    let _gaurd = crate::init_tracing_for_testing();
+    let _guard = crate::init_tracing_for_testing();
 
     // Setup a network which disallows all incoming connections
     let config = crate::Config {
@@ -212,7 +212,7 @@ async fn max_concurrent_connections_1() -> Result<()> {
 
 #[tokio::test]
 async fn reject_peer_with_affinity_never() -> Result<()> {
-    let _gaurd = crate::init_tracing_for_testing();
+    let _guard = crate::init_tracing_for_testing();
 
     let network_1 = build_network()?;
     let network_2 = build_network()?;
@@ -236,7 +236,7 @@ async fn reject_peer_with_affinity_never() -> Result<()> {
 
 #[tokio::test]
 async fn peers_with_affinity_never_are_not_dialed_in_the_background() -> Result<()> {
-    let _gaurd = crate::init_tracing_for_testing();
+    let _guard = crate::init_tracing_for_testing();
 
     let network_1 = build_network()?;
     let network_2 = build_network()?;
@@ -300,7 +300,7 @@ fn build_network_with_addr(addr: &str) -> Result<Network> {
 
 fn echo_service() -> BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible> {
     let handle = move |request: Request<Bytes>| async move {
-        trace!("recieved: {}", request.body().escape_ascii());
+        trace!("received: {}", request.body().escape_ascii());
         let response = Response::new(request.into_body());
         Result::<Response<Bytes>, Infallible>::Ok(response)
     };
@@ -310,7 +310,7 @@ fn echo_service() -> BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible
 
 #[tokio::test]
 async fn ip6_calling_ip4() -> Result<()> {
-    let _gaurd = crate::init_tracing_for_testing();
+    let _guard = crate::init_tracing_for_testing();
 
     let network_1 = build_network_with_addr("[::]:0")?;
     let network_2 = build_network_with_addr("127.0.0.1:0")?;
@@ -328,7 +328,7 @@ async fn ip6_calling_ip4() -> Result<()> {
 
 #[tokio::test]
 async fn localhost_calling_anyaddr() -> Result<()> {
-    let _gaurd = crate::init_tracing_for_testing();
+    let _guard = crate::init_tracing_for_testing();
 
     let network_1 = build_network_with_addr("0.0.0.0:0")?;
     let network_2 = build_network_with_addr("127.0.0.1:0")?;
@@ -355,7 +355,7 @@ async fn localhost_calling_anyaddr() -> Result<()> {
 
 #[tokio::test]
 async fn dropped_connection() -> Result<()> {
-    let _gaurd = crate::init_tracing_for_testing();
+    let _guard = crate::init_tracing_for_testing();
 
     let network_1 = build_network()?;
     let network_2 = build_network()?;
@@ -383,7 +383,7 @@ async fn dropped_connection() -> Result<()> {
 async fn basic_connectivity_check() -> Result<()> {
     use crate::types::{DisconnectReason, PeerEvent::*};
 
-    let _gaurd = crate::init_tracing_for_testing();
+    let _guard = crate::init_tracing_for_testing();
 
     let network_1 = build_network()?;
     let network_2 = build_network()?;
@@ -424,9 +424,9 @@ async fn basic_connectivity_check() -> Result<()> {
 async fn drop_shutdown() -> Result<()> {
     use tokio::sync::mpsc::error::TryRecvError;
 
-    let _gaurd = crate::init_tracing_for_testing();
+    let _guard = crate::init_tracing_for_testing();
 
-    let (sender, mut reciever) = tokio::sync::mpsc::channel::<()>(1);
+    let (sender, mut receiver) = tokio::sync::mpsc::channel::<()>(1);
 
     let service = {
         let handle = move |request: Request<Bytes>| {
@@ -451,7 +451,7 @@ async fn drop_shutdown() -> Result<()> {
     let peer = network_2.connect(network.local_addr()).await?;
     let _response = network_2.rpc(peer, Request::new(Bytes::new())).await?;
 
-    assert_eq!(Err(TryRecvError::Empty), reciever.try_recv());
+    assert_eq!(Err(TryRecvError::Empty), receiver.try_recv());
 
     let network_ref = network.downgrade();
 
@@ -464,8 +464,8 @@ async fn drop_shutdown() -> Result<()> {
     assert!(network_ref.upgrade().is_none());
 
     // And the network should eventually be completely stopped
-    assert_eq!(None, reciever.recv().await);
-    assert_eq!(Err(TryRecvError::Disconnected), reciever.try_recv());
+    assert_eq!(None, receiver.recv().await);
+    assert_eq!(Err(TryRecvError::Disconnected), receiver.try_recv());
 
     let err = network_2
         .rpc(peer, Request::new(Bytes::new()))
@@ -481,9 +481,9 @@ async fn drop_shutdown() -> Result<()> {
 async fn explicit_shutdown() -> Result<()> {
     use tokio::sync::mpsc::error::TryRecvError;
 
-    let _gaurd = crate::init_tracing_for_testing();
+    let _guard = crate::init_tracing_for_testing();
 
-    let (sender, mut reciever) = tokio::sync::mpsc::channel::<()>(1);
+    let (sender, mut receiver) = tokio::sync::mpsc::channel::<()>(1);
 
     let service = {
         let handle = move |request: Request<Bytes>| {
@@ -508,7 +508,7 @@ async fn explicit_shutdown() -> Result<()> {
     let peer = network_2.connect(network.local_addr()).await?;
     let _response = network_2.rpc(peer, Request::new(Bytes::new())).await?;
 
-    assert_eq!(Err(TryRecvError::Empty), reciever.try_recv());
+    assert_eq!(Err(TryRecvError::Empty), receiver.try_recv());
 
     let network_ref = network.downgrade();
 
@@ -522,7 +522,7 @@ async fn explicit_shutdown() -> Result<()> {
     assert!(network_ref.upgrade().is_none());
 
     // And all clones of the service should have been dropped by now
-    assert_eq!(Err(TryRecvError::Disconnected), reciever.try_recv());
+    assert_eq!(Err(TryRecvError::Disconnected), receiver.try_recv());
 
     let err = network_2
         .rpc(peer, Request::new(Bytes::new()))
@@ -536,7 +536,7 @@ async fn explicit_shutdown() -> Result<()> {
 
 #[tokio::test]
 async fn subscribe_channel_closes_on_shutdown() -> Result<()> {
-    let _gaurd = crate::init_tracing_for_testing();
+    let _guard = crate::init_tracing_for_testing();
     let network = build_network()?;
     let mut subscriber = network.subscribe()?.0;
 
@@ -552,7 +552,7 @@ async fn subscribe_channel_closes_on_shutdown() -> Result<()> {
 
 #[tokio::test]
 async fn subscribe_channel_closes_on_explicit_shutdown() -> Result<()> {
-    let _gaurd = crate::init_tracing_for_testing();
+    let _guard = crate::init_tracing_for_testing();
     let network = build_network()?;
     let mut subscriber = network.subscribe()?.0;
 
@@ -580,16 +580,16 @@ async fn early_termination_of_request_handlers() {
 
     const HANDLER_SLEEP: u64 = 100;
 
-    let _gaurd = crate::init_tracing_for_testing();
+    let _guard = crate::init_tracing_for_testing();
 
-    let (sender, mut reciever) = mpsc::channel::<oneshot::Receiver<()>>(1);
+    let (sender, mut receiver) = mpsc::channel::<oneshot::Receiver<()>>(1);
 
     let service = {
         let handle = move |request: Request<Bytes>| {
             let sender = sender.clone();
             async move {
-                let (_sender, reciever) = oneshot::channel();
-                sender.send(reciever).await.unwrap();
+                let (_sender, receiver) = oneshot::channel();
+                sender.send(receiver).await.unwrap();
                 tokio::time::sleep(Duration::from_secs(HANDLER_SLEEP)).await;
                 let response = Response::new(request.into_body());
                 Result::<Response<Bytes>, Infallible>::Ok(response)
@@ -621,11 +621,11 @@ async fn early_termination_of_request_handlers() {
     let server_fut = async {
         use tokio::sync::oneshot::error::TryRecvError;
 
-        let mut reciever = reciever.recv().await.unwrap();
-        assert_eq!(Err(TryRecvError::Empty), reciever.try_recv());
+        let mut receiver = receiver.recv().await.unwrap();
+        assert_eq!(Err(TryRecvError::Empty), receiver.try_recv());
 
         tokio::time::sleep(Duration::from_secs(2)).await;
-        assert_eq!(Err(TryRecvError::Closed), reciever.try_recv());
+        assert_eq!(Err(TryRecvError::Closed), receiver.try_recv());
     };
 
     futures::future::join(client_fut, server_fut).await;
@@ -698,7 +698,7 @@ async fn user_provided_client_service_layer() {
         )
     };
 
-    let _gaurd = crate::init_tracing_for_testing();
+    let _guard = crate::init_tracing_for_testing();
 
     let (network_1, server_counter_1, client_counter_1) = create_network();
     let (network_2, server_counter_2, client_counter_2) = create_network();
@@ -732,7 +732,7 @@ async fn user_provided_client_service_layer() {
     assert_eq!(1, client_counter_2.load(Ordering::SeqCst));
 }
 
-// Verify that we properly include a `NetworkRef` as an extention to request handlers
+// Verify that we properly include a `NetworkRef` as an extension to request handlers
 #[tokio::test]
 async fn network_ref_via_extension() -> Result<()> {
     let svc = tower::service_fn(|req: Request<Bytes>| async move {
