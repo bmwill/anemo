@@ -34,7 +34,7 @@ impl Connection {
     fn try_peer_id(connection: &quinn::Connection) -> Result<PeerId> {
         // Query the certificate chain provided by a [TLS
         // Connection](https://docs.rs/rustls/0.20.4/rustls/enum.Connection.html#method.peer_certificates).
-        // The first cert in the chain is gaurenteed to be the peer
+        // The first cert in the chain is guaranteed to be the peer
         let peer_cert = &connection
             .peer_identity()
             .unwrap()

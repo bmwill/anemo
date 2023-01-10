@@ -300,14 +300,14 @@ impl NetworkInner {
     }
 
     async fn connect(&self, addr: Address, peer_id: Option<PeerId>) -> Result<PeerId> {
-        let (sender, reciever) = oneshot::channel();
+        let (sender, receiver) = oneshot::channel();
         self.connection_manager_handle
             .send(ConnectionManagerRequest::ConnectRequest(
                 addr, peer_id, sender,
             ))
             .await
             .map_err(|_| anyhow!("network has been shutdown"))?;
-        reciever.await?
+        receiver.await?
     }
 
     fn disconnect(&self, peer_id: PeerId) -> Result<()> {
@@ -337,12 +337,12 @@ impl NetworkInner {
     }
 
     async fn shutdown(&self) -> Result<()> {
-        let (sender, reciever) = oneshot::channel();
+        let (sender, receiver) = oneshot::channel();
         self.connection_manager_handle
             .send(ConnectionManagerRequest::Shutdown(sender))
             .await
             .map_err(|_| anyhow!("network has been shutdown"))?;
-        reciever.await.map_err(Into::into)
+        receiver.await.map_err(Into::into)
     }
 
     /// Returns true if the network has been shutdown.

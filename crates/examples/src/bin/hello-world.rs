@@ -63,11 +63,11 @@ async fn main() {
     let network_2_addr = network_2.local_addr();
 
     let handle = tokio::spawn(async move {
-        let (mut reciever, mut peers) = network_2.subscribe().unwrap();
+        let (mut receiver, mut peers) = network_2.subscribe().unwrap();
 
         let peer_id = {
             if peers.is_empty() {
-                match reciever.recv().await.unwrap() {
+                match receiver.recv().await.unwrap() {
                     PeerEvent::NewPeer(peer_id) => peer_id,
                     PeerEvent::LostPeer(_, _) => todo!(),
                 }

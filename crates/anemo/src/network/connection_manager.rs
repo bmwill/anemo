@@ -32,7 +32,7 @@ struct ConnectingOutput {
     target_peer_id: Option<PeerId>,
 }
 
-/// The active service responsible establishing new inboud and outbound connections.
+/// The active service responsible establishing new inbound and outbound connections.
 pub(crate) struct ConnectionManager {
     config: Arc<Config>,
 
@@ -40,7 +40,7 @@ pub(crate) struct ConnectionManager {
 
     /// Channel to receive external requests/commands for the connection manager to perform.
     ///
-    /// The ConnectionManager will gracefull shutdown once this channel is closed.
+    /// The ConnectionManager will graceful shutdown once this channel is closed.
     mailbox: mpsc::Receiver<ConnectionManagerRequest>,
 
     /// Set of pending inbound and outbound connections.
@@ -108,7 +108,7 @@ impl ConnectionManager {
         // the probability of simultaneous dials, especially in non-production environments where
         // most nodes are spun up around the same time.
         //
-        // TODO maybe look into adding jitter directly onto the dials themsevles so that dials are
+        // TODO maybe look into adding jitter directly onto the dials themselves so that dials are
         // more smeared out over time to avoid spiky load / thundering herd issues where all dial
         // requests happen around the same time.
         let jitter = std::time::Duration::from_millis(1_000).mul_f64(rand::random::<f64>());
@@ -124,7 +124,7 @@ impl ConnectionManager {
                 }
                 maybe_request = self.mailbox.recv() => {
                     // Once all handles to the ConnectionManager's mailbox have been dropped this
-                    // will yeild `None` and we can break out of the event loop and terminate the
+                    // will yield `None` and we can break out of the event loop and terminate the
                     // network
                     let request = if let Some(request) = maybe_request {
                         request
@@ -261,7 +261,7 @@ impl ConnectionManager {
                 _ => {
                     if let Some(limit) = config.max_concurrent_connections() {
                         // We've hit the limit
-                        // TODO maybe have a way to temporatily hold on to a "slot" so that we can ensure
+                        // TODO maybe have a way to temporarily hold on to a "slot" so that we can ensure
                         // we don't go over this limit if multiple connections come in simultaneously.
                         if active_peers.len() >= limit {
                             // Connection doesn't meet the requirements to bypass the limit so bail
@@ -591,8 +591,8 @@ impl ActivePeersInner {
 
     fn subscribe(&self) -> (broadcast::Receiver<PeerEvent>, Vec<PeerId>) {
         let peers = self.peers();
-        let reciever = self.peer_event_sender.subscribe();
-        (reciever, peers)
+        let receiver = self.peer_event_sender.subscribe();
+        (receiver, peers)
     }
 
     fn peers(&self) -> Vec<PeerId> {
@@ -807,7 +807,7 @@ mod tests {
 
     fn echo_service() -> BoxCloneService<Request<Bytes>, Response<Bytes>, Infallible> {
         let handle = move |request: Request<Bytes>| async move {
-            trace!("recieved: {}", request.body().escape_ascii());
+            trace!("received: {}", request.body().escape_ascii());
             let response = Response::new(request.into_body());
             Result::<Response<Bytes>, Infallible>::Ok(response)
         };
