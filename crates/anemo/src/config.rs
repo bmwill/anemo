@@ -116,7 +116,7 @@ pub struct Config {
     /// Set a timeout, in milliseconds, until the peers are notified when network
     /// is shutting down
     ///
-    /// In unspecified, this will default to `1,000` milliseconds.
+    /// If unspecified, there will be no limit
     #[serde(skip_serializing_if = "Option::is_none")]
     pub shutdown_idle_timeout_ms: Option<u64>,
 }
