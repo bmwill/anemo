@@ -793,13 +793,8 @@ mod tests {
         let address = socket.local_addr().unwrap();
         let config = crate::config::EndpointConfig::random("test");
         let endpoint = Arc::new(Endpoint::new(config, socket).unwrap());
-        let manager_config = Config {
-            shutdown_idle_timeout_ms: Some(10_000),
-            ..Default::default()
-        };
-
         let (connection_manager, sender) = ConnectionManager::new(
-            Arc::new(manager_config),
+            Default::default(),
             endpoint,
             ActivePeers::new(1),
             Default::default(),

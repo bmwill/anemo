@@ -107,13 +107,11 @@ impl Endpoint {
     /// Does not proactively close existing connections or cause incoming connections to be
     /// rejected. Consider calling [`close()`] if that is desired.
     ///
-    /// An optional max_timeout property can be provided to ensure that the method
+    /// A max_timeout property should be provided to ensure that the method
     /// will only wait for the designated duration and exit if the limit has been reached.
     ///
     /// [`close()`]: Endpoint::close
-    pub async fn wait_idle(&self, max_timeout: Option<Duration>) {
-        let max_timeout = max_timeout.unwrap_or(Duration::MAX);
-
+    pub async fn wait_idle(&self, max_timeout: Duration) {
         if timeout(max_timeout, self.inner.wait_idle()).await.is_err() {
             warn!(
                 "Max timeout reached {}s while waiting for connections clean shutdown",

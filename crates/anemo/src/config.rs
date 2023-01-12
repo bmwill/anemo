@@ -237,8 +237,10 @@ impl Config {
         self.outbound_request_timeout_ms.map(Duration::from_millis)
     }
 
-    pub(crate) fn shutdown_idle_timeout(&self) -> Option<Duration> {
-        self.shutdown_idle_timeout_ms.map(Duration::from_millis)
+    pub(crate) fn shutdown_idle_timeout(&self) -> Duration {
+        self.shutdown_idle_timeout_ms
+            .map(Duration::from_millis)
+            .unwrap_or(Duration::MAX)
     }
 }
 
