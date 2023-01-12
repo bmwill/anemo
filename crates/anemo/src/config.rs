@@ -112,6 +112,13 @@ pub struct Config {
     /// In unspecified, no default timeout will be configured.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub outbound_request_timeout_ms: Option<u64>,
+
+    /// Set a timeout, in milliseconds, until the peers are notified when network
+    /// is shutting down
+    ///
+    /// In unspecified, this will default to `1,000` milliseconds.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shutdown_idle_timeout_ms: Option<u64>,
 }
 
 /// Configuration for the underlying QUIC transport.
@@ -228,6 +235,10 @@ impl Config {
 
     pub(crate) fn outbound_request_timeout(&self) -> Option<Duration> {
         self.outbound_request_timeout_ms.map(Duration::from_millis)
+    }
+
+    pub(crate) fn shutdown_idle_timeout(&self) -> Option<Duration> {
+        self.shutdown_idle_timeout_ms.map(Duration::from_millis)
     }
 }
 
