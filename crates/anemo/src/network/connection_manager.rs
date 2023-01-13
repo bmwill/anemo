@@ -185,7 +185,9 @@ impl ConnectionManager {
         );
 
         // wait for the endpoint to be idle
-        self.endpoint.wait_idle().await;
+        self.endpoint
+            .wait_idle(self.config.shutdown_idle_timeout())
+            .await;
 
         // This is a small hack in order to ensure that the underlying socket we're bound to is
         // dropped and immediately available to be rebound to once this function exits.

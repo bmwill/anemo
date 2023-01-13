@@ -2,6 +2,7 @@ use crate::{
     config::EndpointConfig, connection::Connection, types::Address, ConnectionOrigin, PeerId,
     Result,
 };
+use std::time::Duration;
 use std::{
     future::Future,
     net::SocketAddr,
@@ -10,7 +11,8 @@ use std::{
     task::{Context, Poll},
 };
 use tap::Pipe;
-use tracing::trace;
+use tokio::time::timeout;
+use tracing::{trace, warn};
 
 /// A QUIC endpoint.
 ///
@@ -105,9 +107,17 @@ impl Endpoint {
     /// Does not proactively close existing connections or cause incoming connections to be
     /// rejected. Consider calling [`close()`] if that is desired.
     ///
+    /// A max_timeout property should be provided to ensure that the method
+    /// will only wait for the designated duration and exit if the limit has been reached.
+    ///
     /// [`close()`]: Endpoint::close
-    pub async fn wait_idle(&self) {
-        self.inner.wait_idle().await;
+    pub async fn wait_idle(&self, max_timeout: Duration) {
+        if timeout(max_timeout, self.inner.wait_idle()).await.is_err() {
+            warn!(
+                "Max timeout reached {}s while waiting for connections clean shutdown",
+                max_timeout.as_secs_f64()
+            );
+        }
     }
 
     /// Switch to a new UDP socket
