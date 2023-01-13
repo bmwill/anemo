@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":[["AllowedPeers",""],["RequireAuthorization","Middleware that adds authorization to a `Service`."],["RequireAuthorizationLayer","`Layer` that adds authorization to a `Service`."],["ResponseFuture","Response future for `RequireAuthorization`."]],"trait":[["AuthorizeRequest","Trait for authorizing requests."]]};

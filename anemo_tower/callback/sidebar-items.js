@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":[["Callback","Middleware that adds callbacks to a `Service`."],["CallbackLayer","`Layer` that adds callbacks to a `Service`."],["ResponseFuture","Response future for `Callback`."]],"trait":[["MakeCallbackHandler",""],["ResponseHandler",""]]};

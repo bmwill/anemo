@@ -1,0 +1,1 @@
+window.ALL_CRATES = ["anemo","anemo_build","anemo_tower","hello_world"];

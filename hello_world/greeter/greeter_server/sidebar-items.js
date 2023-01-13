@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":[["GreeterServer",""],["SayHelloSvc",""]],"trait":[["Greeter","Generated trait containing RPC methods that should be implemented for use with GreeterServer."]],"type":[["InboundRequestLayer",""]]};

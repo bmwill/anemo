@@ -1,0 +1,3 @@
+(function() {var implementors = {
+"hello_world":[["impl&lt;T:&nbsp;<a class=\"trait\" href=\"hello_world/greeter/greeter_server/trait.Greeter.html\" title=\"trait hello_world::greeter::greeter_server::Greeter\">Greeter</a>&gt; RpcService for <a class=\"struct\" href=\"hello_world/greeter/greeter_server/struct.GreeterServer.html\" title=\"struct hello_world::greeter::greeter_server::GreeterServer\">GreeterServer</a>&lt;T&gt;"]]
+};if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

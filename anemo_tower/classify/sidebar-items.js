@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":[["StatusInRangeFailureClass","The failure class for [`StatusInRangeAsFailures`]."]],"struct":[["StatusInRangeAsFailures","Classifier that considers responses with a status code within some range to be failures."]],"trait":[["Classifier","Trait for classifying responses as either success or failure."]]};

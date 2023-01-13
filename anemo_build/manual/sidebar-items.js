@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":[["Builder","Service generator builder."],["Method","A service method descriptor."],["MethodBuilder","Method builder."],["Service","A service descriptor."],["ServiceBuilder","Service builder."]]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":[["Rpc",""]],"trait":[["UnaryService","A specialization of tower_service::Service."]]};

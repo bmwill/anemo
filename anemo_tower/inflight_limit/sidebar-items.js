@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":[["WaitMode","What to do if inflight limit is exceeded."]],"struct":[["InflightLimit","Middleware for adding a per-peer inflight limit to inbound requests."],["InflightLimitLayer","[`Layer`] for adding a per-peer inflight limit to inbound requests."]]};

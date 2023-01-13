@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":[["main",""],["random_key",""]],"mod":[["greeter",""]],"struct":[["HelloRequest",""],["HelloResponse",""],["MyGreeter",""]]};

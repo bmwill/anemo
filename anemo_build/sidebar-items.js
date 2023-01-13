@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":[["client","Service code generation for client"],["manual","This module provides utilities for generating `anemo` service stubs and clients."],["server","Service code generation for Server"]],"struct":[["Attributes","Attributes that will be added generated code."]]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":[["AddExtension","Middleware for adding some shareable value to request extensions."],["AddExtensionLayer","[`Layer`] for adding some shareable value to request extensions."]]};

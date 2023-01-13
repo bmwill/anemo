@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":[["SetRequestHeader","Middleware that sets a header on the request."],["SetRequestHeaderLayer","Layer that applies [`SetRequestHeader`] which adds a request header."]]};

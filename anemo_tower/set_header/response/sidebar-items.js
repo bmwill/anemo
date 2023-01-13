@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":[["ResponseFuture","Response future for [`SetResponseHeader`]."],["SetResponseHeader","Middleware that sets a header on the response."],["SetResponseHeaderLayer","Layer that applies [`SetResponseHeader`] which adds a response header."]]};

@@ -1,0 +1,58 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Set a header on the response."><meta name="keywords" content="rust, rustlang, rust-lang, response"><title>anemo_tower::set_header::response - Rust</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../SourceSerif4-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../FiraSans-Regular.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../FiraSans-Medium.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../SourceCodePro-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../SourceSerif4-Bold.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../SourceCodePro-Semibold.ttf.woff2"><link rel="stylesheet" href="../../../normalize.css"><link rel="stylesheet" href="../../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" href="../../../ayu.css" disabled><link rel="stylesheet" href="../../../dark.css" disabled><link rel="stylesheet" href="../../../light.css" id="themeStyle"><script id="default-settings" ></script><script src="../../../storage.js"></script><script defer src="../../../main.js"></script><noscript><link rel="stylesheet" href="../../../noscript.css"></noscript><link rel="alternate icon" type="image/png" href="../../../favicon-16x16.png"><link rel="alternate icon" type="image/png" href="../../../favicon-32x32.png"><link rel="icon" type="image/svg+xml" href="../../../favicon.svg"></head><body class="rustdoc mod"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle">&#9776;</button><a class="sidebar-logo" href="../../../anemo_tower/index.html"><div class="logo-container"><img class="rust-logo" src="../../../rust-logo.svg" alt="logo"></div></a><h2></h2></nav><nav class="sidebar"><a class="sidebar-logo" href="../../../anemo_tower/index.html"><div class="logo-container"><img class="rust-logo" src="../../../rust-logo.svg" alt="logo"></div></a><h2 class="location"><a href="#">Module response</a></h2><div class="sidebar-elems"><section><ul class="block"><li><a href="#structs">Structs</a></li></ul></section></div></nav><main><div class="width-limiter"><nav class="sub"><form class="search-form"><span></span><input class="search-input" name="search" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><a href="../../../help.html">?</a></div><div id="settings-menu" tabindex="-1"><a href="../../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../../wheel.svg"></a></div></form></nav><section id="main-content" class="content"><div class="main-heading"><h1 class="fqn">Module <a href="../../index.html">anemo_tower</a>::<wbr><a href="../index.html">set_header</a>::<wbr><a class="mod" href="#">response</a><button id="copy-path" onclick="copy_path(this)" title="Copy item path to clipboard"><img src="../../../clipboard.svg" width="19" height="18" alt="Copy item path"></button></h1><span class="out-of-band"><a class="srclink" href="../../../src/anemo_tower/set_header/response.rs.html#1-346">source</a> · <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">[<span class="inner">&#x2212;</span>]</a></span></div><details class="rustdoc-toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Set a header on the response.</p>
+<p>The header value to be set may be provided as a fixed value when the
+middleware is constructed, or determined dynamically based on the response
+by a closure. See the <a href="../trait.MakeHeaderValue.html" title="MakeHeaderValue"><code>MakeHeaderValue</code></a> trait for details.</p>
+<h2 id="example"><a href="#example">Example</a></h2>
+<p>Setting a header from a fixed value provided when the middleware is constructed:</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>anemo::{Request, Response};
+<span class="kw">use </span>anemo_tower::set_header::SetResponseHeaderLayer;
+<span class="kw">use </span>tower::{Service, ServiceExt, ServiceBuilder};
+<span class="kw">use </span>bytes::Bytes;
+
+<span class="kw">let </span><span class="kw-2">mut </span>svc = ServiceBuilder::new()
+    .layer(
+        <span class="comment">// Layer that sets `content-type: text/html` on responses.
+        //
+        // `if_not_present` will only insert the header if it does not already
+        // have a value.
+        </span>SetResponseHeaderLayer::if_not_present(
+            <span class="string">&quot;content-type&quot;</span>.into(),
+            <span class="string">&quot;text/html&quot;</span>.to_owned(),
+        )
+    )
+    .service(render_html);
+
+<span class="kw">let </span>request = Request::empty();
+
+<span class="kw">let </span>response = svc.ready().<span class="kw">await</span><span class="question-mark">?</span>.call(request).<span class="kw">await</span><span class="question-mark">?</span>;
+
+<span class="macro">assert_eq!</span>(response.headers()[<span class="string">&quot;content-type&quot;</span>], <span class="string">&quot;text/html&quot;</span>);</code></pre></div>
+<p>Setting a header based on a value determined dynamically from the response:</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>anemo::{Request, Response};
+<span class="kw">use </span>anemo_tower::set_header::SetResponseHeaderLayer;
+<span class="kw">use </span>tower::{Service, ServiceExt, ServiceBuilder};
+<span class="kw">use </span>bytes::Bytes;
+
+<span class="kw">let </span><span class="kw-2">mut </span>svc = ServiceBuilder::new()
+    .layer(
+        <span class="comment">// Layer that sets `content-length` if the body has a known size.
+        //
+        // `overriding` will insert the header and override any previous values it
+        // may have.
+        </span>SetResponseHeaderLayer::overriding(
+            <span class="string">&quot;content-length&quot;</span>.into(),
+            |response: <span class="kw-2">&amp;</span>Response&lt;Bytes&gt;| {
+                <span class="prelude-val">Some</span>(response.body().len().to_string())
+            }
+        )
+    )
+    .service(render_html);
+
+<span class="kw">let </span>request = Request::empty();
+
+<span class="kw">let </span>response = svc.ready().<span class="kw">await</span><span class="question-mark">?</span>.call(request).<span class="kw">await</span><span class="question-mark">?</span>;
+
+<span class="macro">assert_eq!</span>(response.headers()[<span class="string">&quot;content-length&quot;</span>], <span class="string">&quot;10&quot;</span>);</code></pre></div>
+</div></details><h2 id="structs" class="small-section-header"><a href="#structs">Structs</a></h2><div class="item-table"><div class="item-row"><div class="item-left module-item"><a class="struct" href="struct.ResponseFuture.html" title="anemo_tower::set_header::response::ResponseFuture struct">ResponseFuture</a></div><div class="item-right docblock-short">Response future for <a href="../struct.SetResponseHeader.html" title="SetResponseHeader"><code>SetResponseHeader</code></a>.</div></div><div class="item-row"><div class="item-left module-item"><a class="struct" href="struct.SetResponseHeader.html" title="anemo_tower::set_header::response::SetResponseHeader struct">SetResponseHeader</a></div><div class="item-right docblock-short">Middleware that sets a header on the response.</div></div><div class="item-row"><div class="item-left module-item"><a class="struct" href="struct.SetResponseHeaderLayer.html" title="anemo_tower::set_header::response::SetResponseHeaderLayer struct">SetResponseHeaderLayer</a></div><div class="item-right docblock-short">Layer that applies <a href="../struct.SetResponseHeader.html" title="SetResponseHeader"><code>SetResponseHeader</code></a> which adds a response header.</div></div></div></section></div></main><div id="rustdoc-vars" data-root-path="../../../" data-current-crate="anemo_tower" data-themes="ayu,dark,light" data-resource-suffix="" data-rustdoc-version="1.66.1 (90743e729 2023-01-10)" ></div></body></html>
