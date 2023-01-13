@@ -116,7 +116,7 @@ pub struct Config {
     /// Set a timeout, in milliseconds, until the peers are notified when network
     /// is shutting down
     ///
-    /// If unspecified, there will be no limit
+    /// If unspecified, then this will default to 1 minute (60 * 1_000 ms)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub shutdown_idle_timeout_ms: Option<u64>,
 }
@@ -238,9 +238,11 @@ impl Config {
     }
 
     pub(crate) fn shutdown_idle_timeout(&self) -> Duration {
+        const DEFAULT_SHUTDOWN_IDLE_TIMEOUT_MS: u64 = 60_000; // 1 minute
+
         self.shutdown_idle_timeout_ms
             .map(Duration::from_millis)
-            .unwrap_or(Duration::MAX)
+            .unwrap_or(Duration::from_millis(DEFAULT_SHUTDOWN_IDLE_TIMEOUT_MS))
     }
 }
 
