@@ -1,3 +1,5 @@
+use anyhow::anyhow;
+
 /// Representation of a network address that is dial-able in Anemo
 #[derive(Clone, Debug)]
 pub enum Address {
@@ -127,5 +129,27 @@ impl From<String> for Address {
 impl From<Box<str>> for Address {
     fn from(addr: Box<str>) -> Self {
         Self::AddressString(addr)
+    }
+}
+
+impl TryFrom<&multiaddr::Multiaddr> for Address {
+    type Error = anyhow::Error;
+
+    fn try_from(addr: &multiaddr::Multiaddr) -> Result<Self, Self::Error> {
+        use multiaddr::Protocol;
+        let mut iter = addr.iter();
+
+        match (iter.next(), iter.next(), iter.next()) {
+            (Some(Protocol::Ip4(ipaddr)), Some(Protocol::Udp(port)), None) => {
+                Ok((ipaddr, port).into())
+            }
+            (Some(Protocol::Ip6(ipaddr)), Some(Protocol::Udp(port)), None) => {
+                Ok((ipaddr, port).into())
+            }
+            (Some(Protocol::Dns(hostname)), Some(Protocol::Udp(port)), None) => {
+                Ok((hostname.as_ref(), port).into())
+            }
+            _ => Err(anyhow!("unsupported p2p multiaddr: '{addr}'")),
+        }
     }
 }
