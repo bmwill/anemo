@@ -142,6 +142,32 @@ pub struct QuicConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_concurrent_uni_streams: Option<u64>,
 
+    /// Maximum number of bytes a peer may transmit without acknowledgement on any one stream
+    /// before becoming blocked.
+    ///
+    /// If unspecified, this will default to 1.25MB.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stream_receive_window: Option<u64>,
+
+    /// Maximum number of bytes a peer may transmit across all streams of a connection before
+    /// becoming blocked.
+    ///
+    /// If unspecified, this will default to unlimited.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    receive_window: Option<u64>,
+
+    /// Maximum number of bytes to transmit to a peer without acknowledgment
+    ///
+    /// If unspecified, this will default to 10MB.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    send_window: Option<u64>,
+
+    /// Maximum quantity of out-of-order crypto layer data to buffer
+    ///
+    /// If unspecified, this will default to 16KiB.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    crypto_buffer_size: Option<usize>,
+
     /// How long to wait to hear from a peer before timing out a connection.
     ///
     /// In the absence of any keep-alive messages, connections will be closed if they remain idle
@@ -262,6 +288,28 @@ impl QuicConfig {
             .map(|n| VarInt::try_from(n).unwrap_or(VarInt::MAX))
         {
             config.max_concurrent_uni_streams(max);
+        }
+
+        if let Some(max) = self
+            .stream_receive_window
+            .map(|n| VarInt::try_from(n).unwrap_or(VarInt::MAX))
+        {
+            config.stream_receive_window(max);
+        }
+
+        if let Some(max) = self
+            .receive_window
+            .map(|n| VarInt::try_from(n).unwrap_or(VarInt::MAX))
+        {
+            config.receive_window(max);
+        }
+
+        if let Some(n) = self.send_window {
+            config.send_window(n);
+        }
+
+        if let Some(n) = self.crypto_buffer_size {
+            config.crypto_buffer_size(n);
         }
 
         if let Some(max) = self
