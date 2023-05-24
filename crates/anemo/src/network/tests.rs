@@ -419,6 +419,57 @@ async fn basic_connectivity_check() -> Result<()> {
     Ok(())
 }
 
+#[tokio::test]
+async fn test_network_isolation() -> Result<()> {
+    let _guard = crate::init_tracing_for_testing();
+
+    let network_1 = Network::bind("localhost:0")
+        .random_private_key()
+        .server_name("test1")
+        .start(echo_service())?;
+    let network_2 = Network::bind("localhost:0")
+        .random_private_key()
+        .server_name("test2")
+        .start(echo_service())?;
+    let network_3 = Network::bind("localhost:0")
+        .random_private_key()
+        .server_name("test2")
+        .start(echo_service())?;
+
+    assert!(network_2.connect(network_1.local_addr()).await.is_err());
+    assert!(network_1.connect(network_2.local_addr()).await.is_err());
+    assert!(network_2.connect(network_3.local_addr()).await.is_ok());
+    assert!(network_2.connect(network_2.local_addr()).await.is_ok());
+
+    let network_4 = Network::bind("localhost:0")
+        .random_private_key()
+        .server_name("test3")
+        .alternate_server_name("test3dot1")
+        .start(echo_service())?;
+    let network_5 = Network::bind("localhost:0")
+        .random_private_key()
+        .server_name("test3")
+        .start(echo_service())?;
+    let network_6 = Network::bind("localhost:0")
+        .random_private_key()
+        .server_name("test3dot1")
+        .start(echo_service())?;
+
+    // network_4 and network_5 talk to each other with "test3"
+    assert!(network_4.connect(network_5.local_addr()).await.is_ok());
+    assert!(network_5.connect(network_4.local_addr()).await.is_ok());
+
+    // network_4 accepts "test3dot1" as server but can't init connection to network_6 as client
+    assert!(network_4.connect(network_6.local_addr()).await.is_err());
+    assert!(network_6.connect(network_4.local_addr()).await.is_ok());
+
+    // network_5 and network_6 can't talk to each other
+    assert!(network_5.connect(network_6.local_addr()).await.is_err());
+    assert!(network_6.connect(network_5.local_addr()).await.is_err());
+
+    Ok(())
+}
+
 // Ensure that when all Network handles are dropped that the network is shutdown
 #[tokio::test]
 async fn drop_shutdown() -> Result<()> {
