@@ -511,7 +511,7 @@ impl EndpointConfigBuilder {
         let client_crypto = rustls::ClientConfig::builder()
             .with_safe_defaults()
             .with_custom_certificate_verifier(cert_verifier)
-            .with_single_cert(vec![cert], pkcs8_der)?;
+            .with_client_auth_cert(vec![cert], pkcs8_der)?;
 
         let mut client = quinn::ClientConfig::new(Arc::new(client_crypto));
         client.transport_config(transport_config);
@@ -575,7 +575,7 @@ impl EndpointConfig {
         let client_crypto = rustls::ClientConfig::builder()
             .with_safe_defaults()
             .with_custom_certificate_verifier(Arc::new(server_cert_verifier))
-            .with_single_cert(
+            .with_client_auth_cert(
                 vec![self.client_certificate.clone()],
                 self.pkcs8_der.clone(),
             )
