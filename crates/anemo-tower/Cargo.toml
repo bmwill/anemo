@@ -9,7 +9,7 @@ edition = "2021"
 bytes = "1.2.1"
 dashmap = "5.4.0"
 futures = "0.3.21"
-governor = "0.5.1"
+governor = "0.6.0"
 nonzero_ext = "0.3.0"
 pin-project-lite = "0.2.9"
 tokio = { version = "1.17.0", features = ["sync", "rt", "macros", "io-util"] }
