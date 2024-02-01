@@ -1,6 +1,11 @@
 use crate::{Request, Response};
 use bytes::Bytes;
-use std::{collections::HashMap, convert::Infallible, fmt, sync::Arc};
+use std::{
+    collections::{BTreeMap, HashMap},
+    convert::Infallible,
+    fmt,
+    sync::Arc,
+};
 use tower::{
     util::{BoxCloneService, Oneshot},
     Service,
@@ -30,7 +35,7 @@ impl RouteId {
 /// The router type for composing handlers and services.
 #[derive(Clone)]
 pub struct Router {
-    routes: HashMap<RouteId, Route>,
+    routes: BTreeMap<RouteId, Route>,
     matcher: RouteMatcher,
     fallback: Route,
 }
