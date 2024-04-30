@@ -388,6 +388,63 @@ async fn dropped_connection() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn non_graceful_dropped_connection() -> Result<()> {
+    let _guard = crate::init_tracing_for_testing();
+
+    let runtime_1 = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
+    let runtime_2 = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
+
+    let network_1 = {
+        let _guard = runtime_1.enter();
+        build_network()?
+    };
+    let network_2 = {
+        let _guard = runtime_2.enter();
+        build_network()?
+    };
+    let network_2_addr = network_2.local_addr();
+
+    std::thread::spawn(move || {
+        runtime_2.spawn(async move {
+            let _network_2 = network_2;
+            tokio::time::sleep(Duration::from_secs(60)).await;
+        });
+
+        runtime_2.block_on(async { tokio::time::sleep(Duration::from_secs(10)).await });
+
+        runtime_2.shutdown_timeout(Duration::from_secs(0));
+    });
+
+    // ensure that we connect and an rpc works
+    runtime_1.block_on(async {
+        let msg = b"The Way of Kings";
+        let peer = network_1.connect(network_2_addr).await?;
+        let mut peer = network_1.peer(peer).unwrap();
+
+        let response = peer.rpc(Request::new(msg.as_ref().into())).await?;
+
+        tracing::info!("{}", response.body().escape_ascii());
+        Result::<_, anyhow::Error>::Ok(())
+    })?;
+
+    // expect that we'll timeout eventually
+    runtime_1.block_on(async {
+        let (mut events, _) = network_1.subscribe()?;
+
+        let foo = events.recv().await?;
+        tracing::info!("{foo:?}");
+
+        Result::<_, anyhow::Error>::Ok(())
+    })?;
+
+    Ok(())
+}
+
 #[tokio::test]
 async fn basic_connectivity_check() -> Result<()> {
     use crate::types::{DisconnectReason, PeerEvent::*};
