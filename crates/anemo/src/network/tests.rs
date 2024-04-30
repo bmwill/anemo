@@ -1,6 +1,6 @@
 use crate::{types::PeerEvent, Network, NetworkRef, Request, Response, Result};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use futures::FutureExt;
+use futures::{FutureExt};
 use std::{convert::Infallible, time::Duration};
 use tower::{util::BoxCloneService, ServiceExt};
 use tracing::trace;
@@ -415,9 +415,10 @@ fn non_graceful_dropped_connection() -> Result<()> {
             tokio::time::sleep(Duration::from_secs(60)).await;
         });
 
-        runtime_2.block_on(async { tokio::time::sleep(Duration::from_secs(10)).await });
+        runtime_2.block_on(async { tokio::time::sleep(Duration::from_secs(2)).await });
 
         runtime_2.shutdown_timeout(Duration::from_secs(0));
+        eprintln!("runtime_2 shutdown");
     });
 
     // ensure that we connect and an rpc works
@@ -429,15 +430,17 @@ fn non_graceful_dropped_connection() -> Result<()> {
         let response = peer.rpc(Request::new(msg.as_ref().into())).await?;
 
         tracing::info!("{}", response.body().escape_ascii());
-        Result::<_, anyhow::Error>::Ok(())
-    })?;
 
-    // expect that we'll timeout eventually
-    runtime_1.block_on(async {
+            tokio::time::sleep(Duration::from_secs(4)).await;
+
+        let msg = b"Words of Radiance";
+
         let (mut events, _) = network_1.subscribe()?;
 
-        let foo = events.recv().await?;
-        tracing::info!("{foo:?}");
+        tracing::info!("sending second request that will timeout");
+        let (response, event) = tokio::join!(peer.rpc(Request::new(msg.as_ref().into())), events.recv());
+        tracing::info!("{event:?}");
+        tracing::info!("{response:?}");
 
         Result::<_, anyhow::Error>::Ok(())
     })?;
