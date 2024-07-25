@@ -193,7 +193,7 @@ impl<T> Response<T> {
         &mut self.head.extensions
     }
 
-    pub fn with_extension<E: Send + Sync + 'static>(mut self, extension: E) -> Self {
+    pub fn with_extension<E: Clone + Send + Sync + 'static>(mut self, extension: E) -> Self {
         self.extensions_mut().insert(extension);
         self
     }
