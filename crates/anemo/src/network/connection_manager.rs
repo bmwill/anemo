@@ -196,6 +196,8 @@ impl ConnectionManager {
         // and freed.
         let socket = std::net::UdpSocket::bind((std::net::Ipv4Addr::LOCALHOST, 0)).unwrap();
         self.endpoint.rebind(socket).unwrap();
+        let socket = std::net::UdpSocket::bind((std::net::Ipv4Addr::LOCALHOST, 0)).unwrap();
+        self.endpoint.rebind(socket).unwrap();
     }
 
     /// This method adds an established connection with a peer to the map of active peers.

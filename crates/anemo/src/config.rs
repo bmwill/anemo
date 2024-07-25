@@ -4,7 +4,9 @@ use crate::{
 };
 use pkcs8::EncodePrivateKey;
 use quinn::VarInt;
-use rcgen::{CertificateParams, KeyPair, SignatureAlgorithm};
+use rcgen::{CertificateParams, KeyPair};
+use rustls::pki_types::CertificateDer;
+use rustls::pki_types::PrivateKeyDer;
 use serde::{Deserialize, Serialize};
 use std::{sync::Arc, time::Duration};
 
@@ -422,7 +424,7 @@ impl EndpointConfigBuilder {
         // so only needs the primary certificate.
         let client_config = Self::client_config(
             primary_certificate.clone(),
-            pkcs8_der.clone(),
+            pkcs8_der.clone_key(),
             cert_verifier.clone(),
             transport_config.clone(),
         )?;
@@ -440,14 +442,14 @@ impl EndpointConfigBuilder {
                         (primary_server_name.clone(), primary_certificate.clone()),
                         (alternate_server_name, alternate_certificate),
                     ],
-                    pkcs8_der.clone(),
+                    pkcs8_der.clone_key(),
                     cert_verifier,
                     transport_config.clone(),
                 )
             }
             _ => Self::server_config(
                 vec![(primary_server_name.clone(), primary_certificate.clone())],
-                pkcs8_der.clone(),
+                pkcs8_der.clone_key(),
                 cert_verifier,
                 transport_config.clone(),
             ),
@@ -470,51 +472,66 @@ impl EndpointConfigBuilder {
     fn generate_cert(
         keypair: &ed25519::KeypairBytes,
         server_name: &str,
-    ) -> (rustls::Certificate, rustls::PrivateKey) {
+    ) -> (CertificateDer<'static>, PrivateKeyDer<'static>) {
         let pkcs8 = keypair.to_pkcs8_der().unwrap();
-        let key_der = rustls::PrivateKey(pkcs8.as_bytes().to_vec());
-        let certificate =
-            private_key_to_certificate(vec![server_name.to_owned()], &key_der).unwrap();
-        (certificate, key_der)
+        let key_der = PrivateKeyDer::Pkcs8(pkcs8.as_bytes().to_vec().into());
+        let keypair = KeyPair::from_der_and_sign_algo(&key_der, &rcgen::PKCS_ED25519).unwrap();
+        let certificate = CertificateParams::new(vec![server_name.to_owned()])
+            .unwrap()
+            .self_signed(&keypair)
+            .unwrap();
+
+        let certificate_der = certificate.der().to_owned();
+
+        (certificate_der, key_der)
     }
 
     fn server_config(
-        certs: Vec<(String, rustls::Certificate)>,
-        pkcs8_der: rustls::PrivateKey,
+        certs: Vec<(String, CertificateDer<'static>)>,
+        pkcs8_der: PrivateKeyDer<'static>,
         cert_verifier: Arc<CertVerifier>,
         transport_config: Arc<quinn::TransportConfig>,
     ) -> Result<quinn::ServerConfig> {
         let mut server_cert_resolver = rustls::server::ResolvesServerCertUsingSni::new();
-        let key = rustls::sign::any_supported_type(&pkcs8_der)
+        let key = rustls::crypto::ring::sign::any_supported_type(&pkcs8_der)
             .map_err(|_| anyhow::anyhow!("invalid private key"))?;
         for (server_name, cert) in certs {
             let certified_key = rustls::sign::CertifiedKey::new(vec![cert], key.clone());
             server_cert_resolver.add(&server_name, certified_key)?;
         }
 
-        let server_crypto = rustls::ServerConfig::builder()
-            .with_safe_defaults()
-            .with_client_cert_verifier(cert_verifier)
-            .with_cert_resolver(Arc::new(server_cert_resolver));
+        let server_crypto = rustls::ServerConfig::builder_with_provider(Arc::new(
+            rustls::crypto::ring::default_provider(),
+        ))
+        .with_safe_default_protocol_versions()?
+        .with_client_cert_verifier(cert_verifier)
+        .with_cert_resolver(Arc::new(server_cert_resolver));
 
-        let mut server = quinn::ServerConfig::with_crypto(Arc::new(server_crypto));
+        let mut server = quinn::ServerConfig::with_crypto(Arc::new(
+            quinn::crypto::rustls::QuicServerConfig::try_from(server_crypto).unwrap(),
+        ));
         server.transport = transport_config;
         Ok(server)
     }
 
     #[allow(deprecated)]
     fn client_config(
-        cert: rustls::Certificate,
-        pkcs8_der: rustls::PrivateKey,
+        cert: CertificateDer<'static>,
+        pkcs8_der: PrivateKeyDer<'static>,
         cert_verifier: Arc<CertVerifier>,
         transport_config: Arc<quinn::TransportConfig>,
     ) -> Result<quinn::ClientConfig> {
-        let client_crypto = rustls::ClientConfig::builder()
-            .with_safe_defaults()
-            .with_custom_certificate_verifier(cert_verifier)
-            .with_single_cert(vec![cert], pkcs8_der)?;
+        let client_crypto = rustls::ClientConfig::builder_with_provider(Arc::new(
+            rustls::crypto::ring::default_provider(),
+        ))
+        .with_safe_default_protocol_versions()?
+        .dangerous()
+        .with_custom_certificate_verifier(cert_verifier)
+        .with_client_auth_cert(vec![cert], pkcs8_der)?;
 
-        let mut client = quinn::ClientConfig::new(Arc::new(client_crypto));
+        let mut client = quinn::ClientConfig::new(Arc::new(
+            quinn::crypto::rustls::QuicClientConfig::try_from(client_crypto).unwrap(),
+        ));
         client.transport_config(transport_config);
         Ok(client)
     }
@@ -524,8 +541,8 @@ impl EndpointConfigBuilder {
 pub(crate) struct EndpointConfig {
     peer_id: PeerId,
     // Store client certificate for outbound connections initiation
-    client_certificate: rustls::Certificate,
-    pkcs8_der: rustls::PrivateKey,
+    client_certificate: CertificateDer<'static>,
+    pkcs8_der: PrivateKeyDer<'static>,
     quinn_server_config: quinn::ServerConfig,
     quinn_client_config: quinn::ClientConfig,
 
@@ -578,16 +595,22 @@ impl EndpointConfig {
             },
             peer_id,
         );
-        let client_crypto = rustls::ClientConfig::builder()
-            .with_safe_defaults()
-            .with_custom_certificate_verifier(Arc::new(server_cert_verifier))
-            .with_single_cert(
-                vec![self.client_certificate.clone()],
-                self.pkcs8_der.clone(),
-            )
-            .unwrap();
+        let client_crypto = rustls::ClientConfig::builder_with_provider(Arc::new(
+            rustls::crypto::ring::default_provider(),
+        ))
+        .with_safe_default_protocol_versions()
+        .unwrap()
+        .dangerous()
+        .with_custom_certificate_verifier(Arc::new(server_cert_verifier))
+        .with_client_auth_cert(
+            vec![self.client_certificate.clone()],
+            self.pkcs8_der.clone_key(),
+        )
+        .unwrap();
 
-        let mut client = quinn::ClientConfig::new(Arc::new(client_crypto));
+        let mut client = quinn::ClientConfig::new(Arc::new(
+            quinn::crypto::rustls::QuicClientConfig::try_from(client_crypto).unwrap(),
+        ));
         client.transport_config(self.transport_config.clone());
         client
     }
@@ -600,32 +623,4 @@ impl EndpointConfig {
             .build()
             .unwrap()
     }
-}
-
-fn private_key_to_certificate(
-    subject_names: impl Into<Vec<String>>,
-    private_key: &rustls::PrivateKey,
-) -> Result<rustls::Certificate, anyhow::Error> {
-    let alg = &rcgen::PKCS_ED25519;
-
-    let certificate = gen_certificate(subject_names, (private_key.0.as_ref(), alg))?;
-    Ok(certificate)
-}
-
-fn gen_certificate(
-    subject_names: impl Into<Vec<String>>,
-    key_pair: (&[u8], &'static SignatureAlgorithm),
-) -> Result<rustls::Certificate, anyhow::Error> {
-    let kp = KeyPair::from_der_and_sign_algo(key_pair.0, key_pair.1)?;
-
-    let mut cert_params = CertificateParams::new(subject_names);
-    cert_params.key_pair = Some(kp);
-    cert_params.distinguished_name = rcgen::DistinguishedName::new();
-    cert_params.alg = key_pair.1;
-
-    let cert = rcgen::Certificate::from_params(cert_params).expect(
-        "unreachable! from_params should only fail if the key is incompatible with params.algo",
-    );
-    let cert_bytes = cert.serialize_der()?;
-    Ok(rustls::Certificate(cert_bytes))
 }

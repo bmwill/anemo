@@ -89,6 +89,7 @@ impl DisconnectReason {
             ConnectionError::Reset => DisconnectReason::Reset,
             ConnectionError::TimedOut => DisconnectReason::TimedOut,
             ConnectionError::LocallyClosed => DisconnectReason::LocallyClosed,
+            ConnectionError::CidsExhausted => DisconnectReason::TransportError,
         }
     }
 }

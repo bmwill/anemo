@@ -1,6 +1,7 @@
 use crate::{ConnectionOrigin, PeerId, Result};
 use quinn::{ConnectionError, RecvStream};
 use quinn_proto::ConnectionStats;
+use rustls::pki_types::CertificateDer;
 use std::{
     fmt, io,
     net::SocketAddr,
@@ -39,7 +40,7 @@ impl Connection {
         let peer_cert = &connection
             .peer_identity()
             .unwrap()
-            .downcast::<Vec<rustls::Certificate>>()
+            .downcast::<Vec<CertificateDer>>()
             .unwrap()[0];
 
         let peer_id = crate::crypto::peer_id_from_certificate(peer_cert)?;
@@ -182,7 +183,9 @@ impl tokio::io::AsyncWrite for SendStream {
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
-        Pin::new(&mut self.0).poll_write(cx, buf)
+        Pin::new(&mut self.0)
+            .poll_write(cx, buf)
+            .map_err(Into::into)
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {

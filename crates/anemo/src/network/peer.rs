@@ -59,7 +59,7 @@ impl Peer {
         //
 
         write_request(&mut send_stream, request).await?;
-        send_stream.get_mut().finish().await?;
+        send_stream.get_mut().finish()?;
 
         //
         // Read Response

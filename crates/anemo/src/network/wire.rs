@@ -45,7 +45,8 @@ pub(crate) async fn handshake(
         crate::ConnectionOrigin::Inbound => {
             let mut send_stream = connection.open_uni().await?;
             write_version_frame(&mut send_stream, Version::V1).await?;
-            send_stream.finish().await?;
+            send_stream.finish()?;
+            send_stream.stopped().await?;
         }
         crate::ConnectionOrigin::Outbound => {
             let mut recv_stream = connection.accept_uni().await?;

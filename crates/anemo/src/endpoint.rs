@@ -159,10 +159,11 @@ impl<'a> Future for Accept<'a> {
     type Output = Option<Connecting>;
 
     fn poll(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Self::Output> {
-        self.project()
-            .inner
-            .poll(ctx)
-            .map(|maybe_connecting| maybe_connecting.map(Connecting::new_inbound))
+        self.project().inner.poll(ctx).map(|maybe_connecting| {
+            maybe_connecting
+                .and_then(|incoming| incoming.accept().ok())
+                .map(Connecting::new_inbound)
+        })
     }
 }
 
@@ -229,7 +230,8 @@ mod test {
             {
                 let mut send_stream = connection.open_uni().await.unwrap();
                 send_stream.write_all(msg).await.unwrap();
-                send_stream.finish().await.unwrap();
+                send_stream.finish().unwrap();
+                send_stream.stopped().await.unwrap();
             }
             endpoint_1.close();
             endpoint_1.inner.wait_idle().await;
@@ -283,12 +285,14 @@ mod test {
             let req_1 = async {
                 let mut send_stream = connection_2.open_uni().await.unwrap();
                 send_stream.write_all(msg).await.unwrap();
-                send_stream.finish().await.unwrap();
+                send_stream.finish().unwrap();
+                send_stream.stopped().await.unwrap();
             };
             let req_2 = async {
                 let mut send_stream = connection_1.open_uni().await.unwrap();
                 send_stream.write_all(msg).await.unwrap();
-                send_stream.finish().await.unwrap();
+                send_stream.finish().unwrap();
+                send_stream.stopped().await.unwrap();
             };
             join(req_1, req_2).await;
             endpoint_1.close();
@@ -359,7 +363,8 @@ mod test {
         {
             let mut send_stream = connection_1_to_2.open_uni().await.unwrap();
             send_stream.write_all(msg).await.unwrap();
-            send_stream.finish().await.unwrap();
+            send_stream.finish().unwrap();
+            send_stream.stopped().await.unwrap();
         }
 
         // Read it all

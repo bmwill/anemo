@@ -185,7 +185,8 @@ impl BiStreamRequestHandler {
         //
 
         write_response(&mut self.send_stream, response).await?;
-        self.send_stream.get_mut().finish().await?;
+        self.send_stream.get_mut().finish()?;
+        self.send_stream.get_mut().stopped().await?;
 
         Ok(())
     }
