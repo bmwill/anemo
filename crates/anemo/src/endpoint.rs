@@ -223,7 +223,7 @@ mod test {
         println!("2: {}", endpoint_2.local_addr());
 
         let peer_1 = async move {
-            let connection = endpoint_1.connect(addr_2.into()).unwrap().await.unwrap();
+            let connection = endpoint_1.connect(addr_2).unwrap().await.unwrap();
             assert_eq!(connection.peer_id(), peer_id_2);
             {
                 let mut send_stream = connection.open_uni().await.unwrap();
@@ -276,9 +276,9 @@ mod test {
         println!("2: {}", endpoint_2.local_addr());
 
         let peer_1 = async move {
-            let connection_1 = endpoint_1.connect(addr_2.into()).unwrap().await.unwrap();
+            let connection_1 = endpoint_1.connect(addr_2).unwrap().await.unwrap();
             assert_eq!(connection_1.peer_id(), peer_id_2);
-            let connection_2 = endpoint_1.connect(addr_2.into()).unwrap().await.unwrap();
+            let connection_2 = endpoint_1.connect(addr_2).unwrap().await.unwrap();
             assert_eq!(connection_2.peer_id(), peer_id_2);
             let req_1 = async {
                 let mut send_stream = connection_2.open_uni().await.unwrap();
@@ -351,7 +351,7 @@ mod test {
         let addr_2 = endpoint_2.local_addr();
 
         let (connection_1_to_2, connection_2_to_1) = timeout(join(
-            async { endpoint_1.connect(addr_2.into()).unwrap().await.unwrap() },
+            async { endpoint_1.connect(addr_2).unwrap().await.unwrap() },
             async { endpoint_2.accept().await.unwrap().await.unwrap() },
         ))
         .await
