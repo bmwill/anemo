@@ -92,7 +92,7 @@ impl ClientCertVerifier for CertVerifier {
             .verify_for_usage(
                 SUPPORTED_SIG_ALGS,
                 &trustroots,
-                &chain,
+                chain,
                 now,
                 webpki::KeyUsage::client_auth(),
                 None,
@@ -175,7 +175,7 @@ impl ServerCertVerifier for CertVerifier {
             .verify_for_usage(
                 SUPPORTED_SIG_ALGS,
                 &trustroots,
-                &chain,
+                chain,
                 now,
                 webpki::KeyUsage::server_auth(),
                 None,
