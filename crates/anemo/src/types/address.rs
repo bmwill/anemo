@@ -14,7 +14,15 @@ pub enum Address {
 }
 
 impl Address {
-    pub(crate) fn resolve(&self) -> std::io::Result<std::net::SocketAddr> {
+    pub(crate) async fn resolve(&self) -> std::io::Result<std::net::SocketAddr> {
+        let address = self.to_owned();
+
+        tokio::task::spawn_blocking(move || address.resolve_blocking())
+            .await
+            .unwrap()
+    }
+
+    fn resolve_blocking(&self) -> std::io::Result<std::net::SocketAddr> {
         std::net::ToSocketAddrs::to_socket_addrs(self).and_then(|mut iter| {
             iter.next().ok_or_else(|| {
                 std::io::Error::new(std::io::ErrorKind::NotFound, "unable to resolve host")

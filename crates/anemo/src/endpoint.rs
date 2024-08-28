@@ -1,7 +1,4 @@
-use crate::{
-    config::EndpointConfig, connection::Connection, types::Address, ConnectionOrigin, PeerId,
-    Result,
-};
+use crate::{config::EndpointConfig, connection::Connection, ConnectionOrigin, PeerId, Result};
 use std::sync::Arc;
 use std::time::Duration;
 use std::{
@@ -47,18 +44,21 @@ impl Endpoint {
     }
 
     #[cfg(test)]
-    fn new_with_address<A: Into<Address>>(config: EndpointConfig, addr: A) -> Result<Self> {
+    fn new_with_address<A: Into<crate::types::Address>>(
+        config: EndpointConfig,
+        addr: A,
+    ) -> Result<Self> {
         let socket = std::net::UdpSocket::bind(addr.into())?;
         Self::new(config, socket)
     }
 
-    pub fn connect(&self, address: Address) -> Result<Connecting> {
+    pub fn connect(&self, address: SocketAddr) -> Result<Connecting> {
         self.connect_with_client_config(self.config.client_config().clone(), address)
     }
 
     pub fn connect_with_expected_peer_id(
         &self,
-        address: Address,
+        address: SocketAddr,
         peer_id: PeerId,
     ) -> Result<Connecting> {
         let config = self
@@ -70,12 +70,10 @@ impl Endpoint {
     fn connect_with_client_config(
         &self,
         config: quinn::ClientConfig,
-        address: Address,
+        address: SocketAddr,
     ) -> Result<Connecting> {
-        let addr = address.resolve()?;
-
         self.inner
-            .connect_with(config, addr, self.config.server_name())
+            .connect_with(config, address, self.config.server_name())
             .map_err(Into::into)
             .map(Connecting::new_outbound)
     }

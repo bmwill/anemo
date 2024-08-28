@@ -429,33 +429,32 @@ impl ConnectionManager {
         peer_id: Option<PeerId>,
         oneshot: oneshot::Sender<Result<PeerId>>,
     ) {
-        let target_address = address.clone();
-        let maybe_connecting = if let Some(peer_id) = peer_id {
-            self.endpoint
-                .connect_with_expected_peer_id(address, peer_id)
-        } else {
-            self.endpoint.connect(address)
-        };
         self.pending_connections.spawn(Self::dial_peer_task(
-            maybe_connecting,
-            target_address,
+            self.endpoint.clone(),
+            address,
             peer_id,
             oneshot,
             self.config.clone(),
         ));
     }
 
-    // TODO maybe look at cloning the endpoint so that we can try multiple addresses in the event
-    // Address resolves to multiple ips.
+    // TODO maybe look at trying all addresses that are resolved vs just the first one.
     async fn dial_peer_task(
-        maybe_connecting: Result<Connecting>,
+        endpoint: Arc<Endpoint>,
         target_address: Address,
         peer_id: Option<PeerId>,
         oneshot: oneshot::Sender<Result<PeerId>>,
         config: Arc<Config>,
     ) -> ConnectingOutput {
         let fut = async {
-            let connection = maybe_connecting?.await?;
+            let socket_addr = target_address.resolve().await?;
+
+            let connection = if let Some(peer_id) = peer_id {
+                endpoint.connect_with_expected_peer_id(socket_addr, peer_id)
+            } else {
+                endpoint.connect(socket_addr)
+            }?
+            .await?;
 
             super::wire::handshake(connection).await
         };
