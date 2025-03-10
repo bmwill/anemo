@@ -503,7 +503,7 @@ impl EndpointConfigBuilder {
         let server_crypto = rustls::ServerConfig::builder_with_provider(Arc::new(
             rustls::crypto::ring::default_provider(),
         ))
-        .with_safe_default_protocol_versions()?
+        .with_protocol_versions(&[&rustls::version::TLS13])?
         .with_client_cert_verifier(cert_verifier)
         .with_cert_resolver(Arc::new(server_cert_resolver));
 
@@ -524,7 +524,7 @@ impl EndpointConfigBuilder {
         let client_crypto = rustls::ClientConfig::builder_with_provider(Arc::new(
             rustls::crypto::ring::default_provider(),
         ))
-        .with_safe_default_protocol_versions()?
+        .with_protocol_versions(&[&rustls::version::TLS13])?
         .dangerous()
         .with_custom_certificate_verifier(cert_verifier)
         .with_client_auth_cert(vec![cert], pkcs8_der)?;
