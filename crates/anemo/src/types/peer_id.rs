@@ -68,7 +68,7 @@ impl serde::Serialize for PeerId {
 
 struct ShortPeerId<'a>(&'a PeerId, u8);
 
-impl<'a> std::fmt::Display for ShortPeerId<'a> {
+impl std::fmt::Display for ShortPeerId<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:.len$}", self.0, len = self.1.into())
     }

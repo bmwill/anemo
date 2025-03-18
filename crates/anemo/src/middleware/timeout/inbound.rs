@@ -99,7 +99,7 @@ where
         let this = self.project();
 
         if let Poll::Ready(result) = this.inner.poll(cx) {
-            return Poll::Ready(result.map_err(Into::into));
+            return Poll::Ready(result);
         }
 
         if let Some(sleep) = this.sleep.as_pin_mut() {
